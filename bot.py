@@ -1,11 +1,9 @@
 import telebot
 from telebot import types
-import json
 import os
 from PIL import Image, PngImagePlugin
 
 # --- إعدادات البوت السرية ---
-# جلب التوكن وتنظيفه من أي مسافات أو رموز زائدة قد تسبب TypeError
 raw_token = os.getenv("BOT_TOKEN")
 BOT_TOKEN = raw_token.strip() if raw_token else None
 
@@ -13,7 +11,6 @@ if not BOT_TOKEN:
     raise ValueError("❌ خطأ: لم يتم العثور على متغير BOT_TOKEN في إعدادات السيرفر!")
 
 bot = telebot.TeleBot(BOT_TOKEN)
-DB_FILE = "voice_db.json"
 
 PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
 VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId/"
@@ -21,16 +18,19 @@ VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId/"
 user_states = {}
 user_data = {}
 
-# --- إدارة قاعدة بيانات الأصوات ---
-def load_db():
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, 'r') as f:
-            try: return json.load(f)
-            except: return {"فتاة 1": {}}
-    return {"فتاة 1": {}}
-
-def save_db(db):
-    with open(DB_FILE, 'w') as f: json.dump(db, f, indent=4)
+# 🔒 مكتبة المعرفات الثابتة المستخرجة من صورك (تعمل للجميع ولن تختفي على Railway)
+GIRLS_LIBRARY = {
+    "مقطع 1": "CQACAgQAAxkBAAII_2okuG-TG1NdVpdf5Gghet44v1JEAAK2JQACEHghUQEFWwXubmDOwQ",
+    "مقطع 2": "CQACAgQAAxkBAAIJAWokuHdBxmA_tR0Lg3GxYB9BXfTRAAK3JQACEHghUWIoUPZPN7yXOwQ",
+    "مقطع 3": "CQACAgQAAxkBAAIJA2okuH4NvntrcUNVEhaUIDfcflu0AAK4JQACEHghUR1XRVx3TsCEOwQ",
+    "مقطع 4": "CQACAgQAAxkBAAIJBWokuISG_4HJnBhwqXzELXU7PhqqAAK5JQACEHghUQ0jvqyKLkrOwQ",
+    "مقطع 5": "CQACAgQAAxkBAAIJB2okuT03fwOLKdwDdTsQXwM8ZBDAAK6JQACEHghUa0Rl_KtghuhOwQ",
+    "مقطع 6": "CQACAgQAAxkBAAIJCWokuJqfDTIwuEZbB8QMXIURiJASAAK7JQACEHghUdRtAyYbafwlOwQ",
+    "مقطع 7": "CQACAgQAAxkBAAIJC2okuKMY-6AXZEDIGb6LA6hSzKwyAAK9JQACEHghURUXhvDfiAFlOwQ",
+    "مقطع 8": "CQACAgQAAxkBAAIJDwokuK9w8qUAAekjE7Uej99wAAG4zqwaAr4IAAIQeCFR2nFUXBS-MvE7BA",
+    "مقطع 9": "CQACAgQAAxkBAAIJD2okuMGDIGHNzK02YdZTlwpkSeQwAAK_JQACEHghUdPja0O9dFPKOwQ",
+    "مقطع 10": "CQACAgQAAxkBAAIJEWokuM1eVFK3DCN6TarnYudZsm_jAALAJQACEHghUT5dv0QoiE48OwQ"
+}
 
 # --- دالة حقن الرابط في الصورة ---
 def hide_link_in_metadata(image_path, link, output_path):
@@ -55,7 +55,6 @@ def send_welcome(message):
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
     chat_id = call.message.chat.id
-    db = load_db()
 
     if call.data == "inject_start":
         user_states[chat_id] = "waiting_for_image_inject"
@@ -67,37 +66,27 @@ def handle_query(call):
     
     elif call.data == "voice_menu":
         markup = types.InlineKeyboardMarkup(row_width=2)
-        voices = db.get("فتاة 1", {})
-        if not voices:
-            bot.answer_callback_query(call.id, "لا توجد مقاطع محفوظة، أرسل ملفاً صوتياً للبوت ليتم حفظه!")
-            return
-        for name in voices.keys():
+        for name in GIRLS_LIBRARY.keys():
             markup.add(types.InlineKeyboardButton(name, callback_data=f"play:{name}"))
         bot.edit_message_text("اختر المقطع:", chat_id, call.message.message_id, reply_markup=markup)
         
     elif call.data.startswith("play:"):
         name = call.data.split(":")[1]
-        file_id = db["فتاة 1"].get(name)
-        try: bot.send_voice(chat_id, file_id)
-        except: bot.answer_callback_query(call.id, "❌ خطأ في تشغيل المقطع.")
+        file_id = GIRLS_LIBRARY.get(name)
+        
+        try:
+            bot.send_voice(chat_id, file_id)
+        except Exception as e:
+            bot.answer_callback_query(call.id, "❌ خطأ: تعذر تشغيل المقطع.")
 
-# --- المعالج العام (صور، نصوص، أصوات) ---
-@bot.message_handler(content_types=['photo', 'text', 'voice'])
+# --- المعالج العام (صور، نصوص) ---
+@bot.message_handler(content_types=['photo', 'text'])
 def handle_all(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
-
-    # 1. الحفظ التلقائي للأصوات
-    if message.voice:
-        db = load_db()
-        count = len(db["فتاة 1"]) + 1
-        name = f"مقطع {count}"
-        db["فتاة 1"][name] = message.voice.file_id
-        save_db(db)
-        bot.reply_to(message, f"✅ تم حفظ {name} في القاعدة بنجاح!")
     
-    # 2. معالجة الحقن (خطوة 1: استلام الصورة)
-    elif state == "waiting_for_image_inject" and message.photo:
+    # معالجة الحقن (خطوة 1: استلام الصورة)
+    if state == "waiting_for_image_inject" and message.photo:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded = bot.download_file(file_info.file_path)
         img_path = f"img_{chat_id}.png"
@@ -106,7 +95,7 @@ def handle_all(message):
         user_states[chat_id] = "waiting_for_link"
         bot.reply_to(message, "تم حفظ الصورة، أرسل الرابط الآن:")
 
-    # 3. معالجة الحقن (خطوة 2: استلام الرابط)
+    # معالجة الحقن (خطوة 2: استلام الرابط)
     elif state == "waiting_for_link" and message.text:
         img_path = user_data.get(chat_id)
         out_path = f"out_{chat_id}.png"
