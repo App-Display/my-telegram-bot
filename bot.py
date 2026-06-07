@@ -5,7 +5,7 @@ import os
 from PIL import Image, PngImagePlugin
 
 # --- إعدادات البوت ---
-BOT_TOKEN = "8128965245:AAHBZW4h25IuZjRqOsGDRZgqHj543gN_030"
+BOT_TOKEN = "8128965245:AAGR-uUAyI_7AqjI6UVImUsqH9q3Y0pTvHA"
 bot = telebot.TeleBot(BOT_TOKEN)
 DB_FILE = "voice_db.json"
 
