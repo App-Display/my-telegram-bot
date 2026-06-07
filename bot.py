@@ -20,7 +20,7 @@ VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId/"
 user_states = {}
 user_data = {}
 
-# --- إدارة قاعدة بيانات الأصوات (تلقائية ومحمية من الحذف) ---
+# --- إدارة قاعدة بيانات الأصوات ---
 def load_db():
     if os.path.exists(DB_FILE):
         with open(DB_FILE, 'r', encoding='utf-8') as f:
@@ -74,22 +74,22 @@ def handle_query(call):
         markup.add(types.InlineKeyboardButton("🔙 عودة للقائمة الرئيسية", callback_data="main_menu"))
         bot.edit_message_text("اختر المجلد المطلوب:", chat_id, call.message.message_id, reply_markup=markup)
 
-    # خطوة 2: عند الضغط على "الفتاة 1" تظهر المقاطع العشرة كاملة
+    # خطوة 2: عند الضغط على "الفتاة 1" تظهر المقاطع العشرة كاملة (10 أزرار)
     elif call.data == "girl_1_menu":
         if not db:
-            bot.answer_callback_query(call.id, "⚠️ لا توجد مقاطع محفوظة حالياً! أرسل البصمات للبوت ليحفظها.")
+            bot.answer_callback_query(call.id, "⚠️ لا توجد مقاطع محفوظة حالياً! أرسل البصمات للبوت ليحفظها تلقائياً.")
             return
         
         markup = types.InlineKeyboardMarkup(row_width=2)
         
-        # كود ذكي لترتيب الأزرار من 1 إلى 10 بدون أي نقص أو تداخل
+        # حلقة برمجية ثابتة ومحكمة لإنشاء 10 أزرار كاملة بالترتيب الصحيح
         for i in range(1, 11):
             name = f"مقطع {i}"
             if name in db:
                 markup.add(types.InlineKeyboardButton(name, callback_data=f"play:{name}"))
                 
         markup.add(types.InlineKeyboardButton("🔙 عودة", callback_data="voice_menu"))
-        bot.edit_message_text("📂 مقاطع الفتاة 1 (10 مقاطع):", chat_id, call.message.message_id, reply_markup=markup)
+        bot.edit_message_text("📂 مقاطع الفتاة 1 (10 مقاطع كامله):", chat_id, call.message.message_id, reply_markup=markup)
         
     elif call.data == "main_menu":
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -118,21 +118,20 @@ def handle_all(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
 
-    # استقبال وحفظ المقاطع بشكل آمن جداً ومضمون من 1 إلى 10 بدون أخطاء
+    # استقبال وحفظ المقاطع بشكل تتابعي حاسم من 1 إلى 10
     if message.voice:
         db = load_db()
         
-        # البحث عن أول رقم مقطع فارغ من 1 إلى 10 لملئه، وإذا كانت ممتلئة يحدّث من مقطع 1
-        target_slot = None
-        for i in range(1, 11):
-            if f"مقطع {i}" not in db:
-                target_slot = i
-                break
+        # حساب الترقيم بشكل مباشر بناءً على عدد المقاطع المسجلة حالياً
+        current_count = len(db)
+        next_slot = current_count + 1
         
-        if target_slot is None:
-            target_slot = 1  # إعادة البدء والتحديث من مقطع 1 إذا أرسلت مقاطع جديدة
+        # إذا تعدينا المقطع العاشر، نقوم بمسح القاعدة للبدء من جديد بشكل نظيف لمنع تداخل الأرقام
+        if next_slot > 10:
+            db = {}
+            next_slot = 1
             
-        name = f"مقطع {target_slot}"
+        name = f"مقطع {next_slot}"
         db[name] = message.voice.file_id
         save_db(db)
         bot.reply_to(message, f"✅ تم حفظ وتحديث الـ ID الخاص بـ ({name}) في مجلد الفتاة 1 بنجاح!")
