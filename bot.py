@@ -5,8 +5,13 @@ import os
 from PIL import Image, PngImagePlugin
 
 # --- إعدادات البوت السرية ---
-# تم تعديل هذا السطر ليقرأ التوكن من إعدادات سيرفر Railway مباشرة دون كتابته علناً
-BOT_TOKEN = os.getenv("BOT_TOKEN") 
+# جلب التوكن وتنظيفه من أي مسافات أو رموز زائدة قد تسبب TypeError
+raw_token = os.getenv("BOT_TOKEN")
+BOT_TOKEN = raw_token.strip() if raw_token else None
+
+if not BOT_TOKEN:
+    raise ValueError("❌ خطأ: لم يتم العثور على متغير BOT_TOKEN في إعدادات السيرفر!")
+
 bot = telebot.TeleBot(BOT_TOKEN)
 DB_FILE = "voice_db.json"
 
@@ -113,5 +118,4 @@ def handle_all(message):
         if os.path.exists(out_path): os.remove(out_path)
 
 if __name__ == '__main__':
-    # استخدام none_stop لضمان استقرار الاتصال وتخطي أخطاء الشبكة المؤقتة
     bot.polling(none_stop=True, interval=0, timeout=20)
