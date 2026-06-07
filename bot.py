@@ -4,8 +4,9 @@ import json
 import os
 from PIL import Image, PngImagePlugin
 
-# --- إعدادات البوت ---
-BOT_TOKEN = "8128965245:AAGR-uUAyI_7AqjI6UVImUsqH9q3Y0pTvHA"
+# --- إعدادات البوت السرية ---
+# تم تعديل هذا السطر ليقرأ التوكن من إعدادات سيرفر Railway مباشرة دون كتابته علناً
+BOT_TOKEN = os.getenv("BOT_TOKEN") 
 bot = telebot.TeleBot(BOT_TOKEN)
 DB_FILE = "voice_db.json"
 
@@ -112,4 +113,5 @@ def handle_all(message):
         if os.path.exists(out_path): os.remove(out_path)
 
 if __name__ == '__main__':
-    bot.infinity_polling()
+    # استخدام none_stop لضمان استقرار الاتصال وتخطي أخطاء الشبكة المؤقتة
+    bot.polling(none_stop=True, interval=0, timeout=20)
