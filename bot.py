@@ -18,7 +18,7 @@ VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId/"
 user_states = {}
 user_data = {}
 
-# 🔒 مكتبة المعرفات الثابتة المستخرجة من صورك (تعمل للجميع ولن تختفي على Railway)
+# 🔒 مكتبة المعرفات الثابتة المصححة والمنظفة 100%
 GIRLS_LIBRARY = {
     "مقطع 1": "CQACAgQAAxkBAAII_2okuG-TG1NdVpdf5Gghet44v1JEAAK2JQACEHghUQEFWwXubmDOwQ",
     "مقطع 2": "CQACAgQAAxkBAAIJAWokuHdBxmA_tR0Lg3GxYB9BXfTRAAK3JQACEHghUWIoUPZPN7yXOwQ",
@@ -77,7 +77,8 @@ def handle_query(call):
         try:
             bot.send_voice(chat_id, file_id)
         except Exception as e:
-            bot.answer_callback_query(call.id, "❌ خطأ: تعذر تشغيل المقطع.")
+            # تم تعديل إرسال التنبيه ليظهر بشكل نصي واضح عند حدوث مشكلة في تليجرام
+            bot.answer_callback_query(call.id, f"❌ تليجرام يرفض معرف المقطع: {name}")
 
 # --- المعالج العام (صور، نصوص) ---
 @bot.message_handler(content_types=['photo', 'text'])
