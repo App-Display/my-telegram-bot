@@ -51,7 +51,8 @@ def send_welcome(message):
         types.InlineKeyboardButton("🔒 حقن رابط في صورة", callback_data="inject_start"),
         types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu")
     )
-    bot.send_message(message.chat.id, "أهلاً المطور سيف الدين، اختر الخدمة:", reply_markup=markup)
+    # تم تعديل نص الرسالة هنا بناءً على طلبك
+    bot.send_message(message.chat.id, "المطور سيف الدين يرحب بك", reply_markup=markup)
 
 # --- معالجة الأزرار والـ Callback ---
 @bot.callback_query_handler(func=lambda call: True)
@@ -72,7 +73,7 @@ def handle_query(call):
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(types.InlineKeyboardButton("👩 الفتاة 1", callback_data="girl_1_menu"))
         markup.add(types.InlineKeyboardButton("🔙 عودة للقائمة الرئيسية", callback_data="main_menu"))
-        bot.edit_message_text("اختر المجلد المطلوب:", chat_id, call.message.message_id, reply_markup=markup)
+        bot.edit_message_text("اختر Mجلد المطلوب:", chat_id, call.message.message_id, reply_markup=markup)
 
     # خطوة 2: عند الضغط على "الفتاة 1" تظهر المقاطع العشرة كاملة (10 أزرار)
     elif call.data == "girl_1_menu":
@@ -99,7 +100,8 @@ def handle_query(call):
             types.InlineKeyboardButton("🔒 حقن رابط في صورة", callback_data="inject_start"),
             types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu")
         )
-        bot.edit_message_text("أهلاً المطور سيف الدين، اختر الخدمة:", chat_id, call.message.message_id, reply_markup=markup)
+        # تم تعديل نص القائمة المعاد تشكيلها لتتطابق مع الرسالة الترحيبية الجديدة
+        bot.edit_message_text("المطور سيف الدين يرحب بك", chat_id, call.message.message_id, reply_markup=markup)
 
     elif call.data.startswith("play:"):
         name = call.data.split(":")[1]
