@@ -1,35 +1,4 @@
 import os
-import sys
-import subprocess
-
-# --- آلية التثبيت التلقائي الذكي للمكتبات داخل سيرفر Railway ---
-def install_missing_packages():
-    required_packages = {
-        "pyTelegramBotAPI": "pyTelegramBotAPI==4.12.0",
-        "requests": "requests==2.31.0",
-        "PIL": "Pillow==10.2.0",
-        "urllib3": "urllib3==2.0.7",
-        "yt_dlp": "yt-dlp"
-    }
-    
-    for module_name, package_name in required_packages.items():
-        try:
-            if module_name == "PIL":
-                import PIL
-            else:
-                __import__(module_name)
-        except ImportError:
-            print(f"🔄 المجلد الناقص المكتشف: {module_name}.. جاري التثبيت التلقائي على السيرفر الآن...")
-            try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
-                print(f"✅ تم تثبيت {package_name} بنجاح!")
-            except Exception as e:
-                print(f"❌ فشل تثبيت {package_name}: {e}")
-
-# تنفيذ الفحص والتثبيت فوراً عند إقلاع السيرفر
-install_missing_packages()
-
-# الآن نقوم باستيراد المكتبات بأمان كامل
 import json
 import urllib3
 import telebot
@@ -44,7 +13,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8446745973:AAFbl0cHMVXW4ZHvUQHnuWqJjf62597qBl0")
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# حل مشكلة الـ ValueError: فرض المسار المؤقت الصالح للكتابة والقراءة على السيرفرات
+# مسار قاعدة البيانات الآمن في مجلد النظام المؤقت
 DB_FILE = "/tmp/voice_db.json"
 
 PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
@@ -53,14 +22,14 @@ VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId/"
 user_states = {}
 user_data = {}
 
-# --- إدارة قاعدة بيانات الأصوات الآمنة ---
+# --- إدارة قاعدة بيانات الأصوات ---
 def load_db():
     try:
         if os.path.exists(DB_FILE):
             with open(DB_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
     except Exception as e:
-        print(f"فشل قراءة قاعدة البيانات، جاري تهيئة ملف جديد: {e}")
+        print(f"تحذير قراءة قاعدة البيانات: {e}")
     return {}
 
 def save_db(db):
@@ -69,7 +38,7 @@ def save_db(db):
         with open(DB_FILE, 'w', encoding='utf-8') as f: 
             json.dump(db, f, indent=4, ensure_ascii=False)
     except Exception as e:
-        print(f"خطأ كتابة قاعدة البيانات السحابية: {e}")
+        print(f"خطأ كتابة قاعدة البيانات: {e}")
 
 # --- دالة حقن الرابط في الصورة ---
 def hide_link_in_metadata(image_path, link, output_path):
@@ -95,7 +64,7 @@ def get_main_keyboard():
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "المطور سيف الدين يرحب بك 🚀\nتم تحديث النظام بالكامل وإصلاح أخطاء المكتبات والصلاحيات تلقائياً!", reply_markup=get_main_keyboard())
+    bot.send_message(message.chat.id, "المطور سيف الدين يرحب بك 🚀\nالبوت متصل الآن بالخادم ومستعد للعمل!", reply_markup=get_main_keyboard())
 
 # --- معالجة الأزرار والـ Callback ---
 @bot.callback_query_handler(func=lambda call: True)
@@ -168,7 +137,7 @@ def handle_query(call):
             'quiet': True,
             'no_warnings': True,
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
             }
         }
 
@@ -201,7 +170,6 @@ def handle_all(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
 
-    # التقاط الروابط مباشرة بمجرد إرسالها في الشات
     if message.text and any(site in message.text for site in ["tiktok.com", "youtube.com", "youtu.be", "instagram.com", "facebook.com", "fb.watch"]):
         user_data[chat_id] = message.text
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -257,5 +225,5 @@ def handle_all(message):
         if os.path.exists(out_path): os.remove(out_path)
 
 if __name__ == '__main__':
-    print("🚀 تم تشغيل البوت وحل مشكلة المكتبات ذاتياً على Railway...")
+    print("🚀 تم إقلاع البوت بنجاح...")
     bot.polling(none_stop=True, interval=0, timeout=40)
