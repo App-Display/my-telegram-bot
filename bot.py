@@ -1,24 +1,46 @@
 import os
+import sys
+import subprocess
+
+# --- آلية التثبيت التلقائي الذكي للمكتبات داخل سيرفر Railway ---
+def install_missing_packages():
+    required_packages = {
+        "pyTelegramBotAPI": "pyTelegramBotAPI==4.12.0",
+        "requests": "requests==2.31.0",
+        "PIL": "Pillow==10.2.0",
+        "urllib3": "urllib3==2.0.7",
+        "yt_dlp": "yt-dlp"
+    }
+    
+    for module_name, package_name in required_packages.items():
+        try:
+            if module_name == "PIL":
+                import PIL
+            else:
+                __import__(module_name)
+        except ImportError:
+            print(f"🔄 المجلد الناقص المكتشف: {module_name}.. جاري التثبيت التلقائي على السيرفر الآن...")
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+                print(f"✅ تم تثبيت {package_name} بنجاح!")
+            except Exception as e:
+                print(f"❌ فشل تثبيت {package_name}: {e}")
+
+# تنفيذ الفحص والتثبيت فوراً عند إقلاع السيرفر
+install_missing_packages()
+
+# الآن نقوم باستيراد المكتبات بأمان كامل
 import json
 import urllib3
 import telebot
 from telebot import types
+import yt_dlp
+from PIL import Image, PngImagePlugin
 
-# فحص واستيراد المكتبات بشكل آمن تماماً لمنع أخطاء الـ ModuleNotFoundError في السيرفر
-try:
-    import yt_dlp
-except ModuleNotFoundError:
-    yt_dlp = None
-
-try:
-    from PIL import Image, PngImagePlugin
-except ModuleNotFoundError:
-    Image, PngImagePlugin = None, None
-
-# إيقاف تحذيرات الشهادات لضمان استقرار التحميل من السيرفرات
+# إيقاف تحذيرات الشهادات لضمان استقرار الاتصال السحابي
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# إعداد التوكن
+# إعداد توكن البوت
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8446745973:AAFbl0cHMVXW4ZHvUQHnuWqJjf62597qBl0")
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -43,7 +65,6 @@ def load_db():
 
 def save_db(db):
     try:
-        # التأكد من وجود المجلد المؤقت قبل الحفظ
         os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
         with open(DB_FILE, 'w', encoding='utf-8') as f: 
             json.dump(db, f, indent=4, ensure_ascii=False)
@@ -52,9 +73,6 @@ def save_db(db):
 
 # --- دالة حقن الرابط في الصورة ---
 def hide_link_in_metadata(image_path, link, output_path):
-    if not Image:
-        print("مكتبة Pillow غير متوفرة حالياً")
-        return
     try:
         img = Image.open(image_path).convert("RGB")
         meta = PngImagePlugin.PngInfo()
@@ -77,7 +95,7 @@ def get_main_keyboard():
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "المطور سيف الدين يرحب بك 🚀\nتم تحديث النظام بالكامل وإصلاح أخطاء السيرفر!", reply_markup=get_main_keyboard())
+    bot.send_message(message.chat.id, "المطور سيف الدين يرحب بك 🚀\nتم تحديث النظام بالكامل وإصلاح أخطاء المكتبات والصلاحيات تلقائياً!", reply_markup=get_main_keyboard())
 
 # --- معالجة الأزرار والـ Callback ---
 @bot.callback_query_handler(func=lambda call: True)
@@ -140,13 +158,7 @@ def handle_query(call):
             bot.answer_callback_query(call.id, "⚠️ انتهت صلاحية الجلسة، أرسل الرابط مجدداً.")
             return
 
-        if not yt_dlp:
-            bot.edit_message_text("❌ لم يتم تثبيت مكتبة yt-dlp السحابية بشكل صحيح في السيرفر بعد.", chat_id, call.message.message_id)
-            return
-
         status_msg = bot.send_message(chat_id, f"⏳ جاري سحب ملف الـ {file_type} مباشرة عبر السيرفر بدون وسيط...")
-        
-        # حفظ الملف في المجلد المؤقت المحمي
         output_template = f"/tmp/media_{chat_id}.%(ext)s"
         
         ydl_opts = {
@@ -174,7 +186,6 @@ def handle_query(call):
                     else:
                         bot.send_audio(chat_id, file_to_send, caption="🎵 تم استخراج وتحميل الصوت بنجاح!")
                 
-                # إزالة مخرجات التحميل فوراً لحماية قرص السيرفر
                 os.remove(filename)
                 bot.delete_message(chat_id, status_msg.message_id)
                 user_data[chat_id] = None
@@ -246,5 +257,5 @@ def handle_all(message):
         if os.path.exists(out_path): os.remove(out_path)
 
 if __name__ == '__main__':
-    print("🚀 تم تشغيل البوت وإصلاح الصلاحيات والمكتبات السحابية بنجاح...")
+    print("🚀 تم تشغيل البوت وحل مشكلة المكتبات ذاتياً على Railway...")
     bot.polling(none_stop=True, interval=0, timeout=40)
