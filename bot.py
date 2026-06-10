@@ -4,7 +4,7 @@ import urllib3
 import telebot
 from telebot import types
 
-# محاولة استيراد المكتبات بشكل آمن لضمان عدم انهيار السيرفر أثناء الـ Build
+# فحص واستيراد المكتبات بشكل آمن تماماً لمنع أخطاء الـ ModuleNotFoundError في السيرفر
 try:
     import yt_dlp
 except ModuleNotFoundError:
@@ -15,15 +15,15 @@ try:
 except ModuleNotFoundError:
     Image, PngImagePlugin = None, None
 
-# إيقاف تحذيرات الشهادات لضمان استقرار الاتصال السحابي
+# إيقاف تحذيرات الشهادات لضمان استقرار التحميل من السيرفرات
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# إعداد توكن البوت (يتعرف تلقائياً على التوكن المرفق أو المتغيرات في السيرفر)
+# إعداد التوكن
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8446745973:AAFbl0cHMVXW4ZHvUQHnuWqJjf62597qBl0")
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# مسار قاعدة بيانات الأصوات المتوافق مع مسارات Linux المؤقتة في ريندر وريلواي
-DB_FILE = "/tmp/voice_db.json" if os.path.exists("/tmp") else "voice_db.json"
+# حل مشكلة الـ ValueError: فرض المسار المؤقت الصالح للكتابة والقراءة على السيرفرات
+DB_FILE = "/tmp/voice_db.json"
 
 PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
 VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId/"
@@ -31,27 +31,29 @@ VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId/"
 user_states = {}
 user_data = {}
 
-# --- إدارة قاعدة بيانات الأصوات ---
+# --- إدارة قاعدة بيانات الأصوات الآمنة ---
 def load_db():
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, 'r', encoding='utf-8') as f:
-            try: 
+    try:
+        if os.path.exists(DB_FILE):
+            with open(DB_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-            except: 
-                return {}
+    except Exception as e:
+        print(f"فشل قراءة قاعدة البيانات، جاري تهيئة ملف جديد: {e}")
     return {}
 
 def save_db(db):
     try:
+        # التأكد من وجود المجلد المؤقت قبل الحفظ
+        os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
         with open(DB_FILE, 'w', encoding='utf-8') as f: 
             json.dump(db, f, indent=4, ensure_ascii=False)
     except Exception as e:
-        print(f"تحذير حفظ قاعدة البيانات: {e}")
+        print(f"خطأ كتابة قاعدة البيانات السحابية: {e}")
 
 # --- دالة حقن الرابط في الصورة ---
 def hide_link_in_metadata(image_path, link, output_path):
     if not Image:
-        print("مكتبة Pillow غير مثبتة")
+        print("مكتبة Pillow غير متوفرة حالياً")
         return
     try:
         img = Image.open(image_path).convert("RGB")
@@ -59,9 +61,9 @@ def hide_link_in_metadata(image_path, link, output_path):
         meta.add_text("URL_LINK", link)
         img.save(output_path, "PNG", pnginfo=meta)
     except Exception as e:
-        print(f"خطأ حقن الميتاداتا: {e}")
+        print(f"خطأ ميتاداتا الصورة: {e}")
 
-# --- واجهة الكيبورد الرئيسية ---
+# --- لوحة التحكم واجهة البوت ---
 def get_main_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -69,13 +71,13 @@ def get_main_keyboard():
         types.InlineKeyboardButton("🎥 طلب رابط كاميرا الفيديو", callback_data="get_video_link"),
         types.InlineKeyboardButton("🔒 حقن رابط في صورة", callback_data="inject_start"),
         types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu"),
-        types.InlineKeyboardButton("📥 قسم التحميلات (مواقع التواصل)", callback_data="download_menu")
+        types.InlineKeyboardButton("📥 قسم التحميلات", callback_data="download_menu")
     )
     return markup
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "المطور سيف الدين يرحب بك 🚀\nالبوت شغال الآن ومستقر بالكامل على السيرفر سحابة!", reply_markup=get_main_keyboard())
+    bot.send_message(message.chat.id, "المطور سيف الدين يرحب بك 🚀\nتم تحديث النظام بالكامل وإصلاح أخطاء السيرفر!", reply_markup=get_main_keyboard())
 
 # --- معالجة الأزرار والـ Callback ---
 @bot.callback_query_handler(func=lambda call: True)
@@ -93,7 +95,7 @@ def handle_query(call):
     
     elif call.data == "download_menu":
         user_states[chat_id] = "waiting_for_url"
-        bot.edit_message_text("📥 أرسل رابط الفيديو الآن من (تيك توك، يوتيوب، إنستغرام، فيسبوك...):", chat_id, call.message.message_id)
+        bot.edit_message_text("📥 أرسل رابط الميديا الآن (تيك توك، يوتيوب، إنستغرام، فيسبوك...):", chat_id, call.message.message_id)
         
     elif call.data == "voice_menu":
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -129,23 +131,23 @@ def handle_query(call):
         else:
             bot.answer_callback_query(call.id, "❌ هذا المقطع غير متاح.")
             
-    # --- نظام التحميل السحابي الشامل المتوافق مع ريندر وريلواي ---
+    # --- معالجة دالة yt_dlp للتحميل النظيف الفوري ---
     elif call.data.startswith("download:"):
         action, file_type = call.data.split(":")
         target_url = user_data.get(chat_id)
         
         if not target_url:
-            bot.answer_callback_query(call.id, "⚠️ انتهت صلاحية الرابط، أرسله مجدداً.")
+            bot.answer_callback_query(call.id, "⚠️ انتهت صلاحية الجلسة، أرسل الرابط مجدداً.")
             return
 
         if not yt_dlp:
-            bot.edit_message_text("❌ لم يتم تثبيت مكتبة yt_dlp على السيرفر بعد. تأكد من إضافة الملف المتطلبات.", chat_id, call.message.message_id)
+            bot.edit_message_text("❌ لم يتم تثبيت مكتبة yt-dlp السحابية بشكل صحيح في السيرفر بعد.", chat_id, call.message.message_id)
             return
 
-        status_msg = bot.send_message(chat_id, f"⏳ جاري معالجة الرابط وسحب ملف الـ {file_type} مباشرة من السيرفر...")
+        status_msg = bot.send_message(chat_id, f"⏳ جاري سحب ملف الـ {file_type} مباشرة عبر السيرفر بدون وسيط...")
         
-        base_dir = "/tmp" if os.path.exists("/tmp") else "."
-        output_template = os.path.join(base_dir, f"media_{chat_id}.%(ext)s")
+        # حفظ الملف في المجلد المؤقت المحمي
+        output_template = f"/tmp/media_{chat_id}.%(ext)s"
         
         ydl_opts = {
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best' if file_type == "Mp4" else 'bestaudio/best',
@@ -154,7 +156,7 @@ def handle_query(call):
             'quiet': True,
             'no_warnings': True,
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
             }
         }
 
@@ -164,30 +166,31 @@ def handle_query(call):
                 filename = ydl.prepare_filename(info)
 
             if os.path.exists(filename):
-                bot.edit_message_text("📥 تم التحميل! جاري إرسال الميديا كملف فوري إلى حسابك...", chat_id, status_msg.message_id)
+                bot.edit_message_text("📥 تم سحب الملف النظيف! جاري رفعه إلى حسابك الآن...", chat_id, status_msg.message_id)
                 
                 with open(filename, 'rb') as file_to_send:
                     if file_type == "Mp4":
-                        bot.send_video(chat_id, file_to_send, caption="🎬 تم التحميل بنجاح بدون علامات مائية!")
+                        bot.send_video(chat_id, file_to_send, caption="🎬 تم تحميل الفيديو بنجاح عبر البوت!")
                     else:
                         bot.send_audio(chat_id, file_to_send, caption="🎵 تم استخراج وتحميل الصوت بنجاح!")
                 
+                # إزالة مخرجات التحميل فوراً لحماية قرص السيرفر
                 os.remove(filename)
                 bot.delete_message(chat_id, status_msg.message_id)
                 user_data[chat_id] = None
             else:
-                bot.edit_message_text("❌ تعذر العثور على الملف بعد تنزيله داخلياً.", chat_id, status_msg.message_id)
+                bot.edit_message_text("❌ لم نتمكن من معالجة الملف المحلي داخل السيرفر.", chat_id, status_msg.message_id)
                 
         except Exception as e:
-            bot.edit_message_text(f"❌ حدث خطأ أثناء التحميل.\nالسبب: {str(e)}", chat_id, status_msg.message_id)
+            bot.edit_message_text(f"❌ فشل السيرفر في معالجة الرابط.\nالسبب: {str(e)}", chat_id, status_msg.message_id)
 
-# --- المعالج العام لاستقبال الروابط بصورة تلقائية دائمًا ---
+# --- المعالج العام الذكي للروابط الفورية ---
 @bot.message_handler(content_types=['photo', 'text', 'voice'])
 def handle_all(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
 
-    # فحص إذا كان النص المرسل عبارة عن رابط لأحد مواقع التواصل
+    # التقاط الروابط مباشرة بمجرد إرسالها في الشات
     if message.text and any(site in message.text for site in ["tiktok.com", "youtube.com", "youtu.be", "instagram.com", "facebook.com", "fb.watch"]):
         user_data[chat_id] = message.text
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -195,7 +198,7 @@ def handle_all(message):
             types.InlineKeyboardButton("فيديو Mp4 🎥", callback_data="download:Mp4"),
             types.InlineKeyboardButton("صوت Mp3 🎵", callback_data="download:Mp3")
         )
-        bot.send_message(chat_id, "⏳ تم رصد رابط ميديا! اختر الصيغة للبدء بالتنزيل مباشرة من السيرفر:", reply_markup=markup)
+        bot.send_message(chat_id, "⏳ تم رصد رابط ميديا! اختر نوع التنزيل المطلوب للسيرفر:", reply_markup=markup)
         return
 
     if state == "waiting_for_url" and message.text:
@@ -220,20 +223,20 @@ def handle_all(message):
         name = f"مقطع {next_slot}"
         db[name] = message.voice.file_id
         save_db(db)
-        bot.reply_to(message, f"✅ تم حفظ وتحديث ({name}) بنجاح على السيرفر!")
+        bot.reply_to(message, f"✅ تم تحديث وحفظ ({name}) بنجاح في البيئة السحابية!")
     
     elif state == "waiting_for_image_inject" and message.photo:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded = bot.download_file(file_info.file_path)
-        img_path = os.path.join("/tmp" if os.path.exists("/tmp") else ".", f"img_{chat_id}.png")
+        img_path = f"/tmp/img_{chat_id}.png"
         with open(img_path, 'wb') as f: f.write(downloaded)
         user_data[chat_id] = img_path
         user_states[chat_id] = "waiting_for_link"
-        bot.reply_to(message, "تم حفظ الصورة على السيرفر، أرسل الرابط الآن للحقن:")
+        bot.reply_to(message, "تم حفظ الصورة، أرسل الرابط الآن للحقن:")
 
     elif state == "waiting_for_link" and message.text:
         img_path = user_data.get(chat_id)
-        out_path = os.path.join("/tmp" if os.path.exists("/tmp") else ".", f"out_{chat_id}.png")
+        out_path = f"/tmp/out_{chat_id}.png"
         hide_link_in_metadata(img_path, message.text, out_path)
         if os.path.exists(out_path):
             with open(out_path, 'rb') as f:
@@ -243,5 +246,5 @@ def handle_all(message):
         if os.path.exists(out_path): os.remove(out_path)
 
 if __name__ == '__main__':
-    print("🚀 البوت شغال ومحمي بالكامل على المنصات السحابية...")
+    print("🚀 تم تشغيل البوت وإصلاح الصلاحيات والمكتبات السحابية بنجاح...")
     bot.polling(none_stop=True, interval=0, timeout=40)
