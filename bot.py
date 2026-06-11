@@ -1,239 +1,102 @@
 import os
-import json
-import urllib3
+import subprocess
 import telebot
 from telebot import types
-from PIL import Image, PngImagePlugin
-import threading
-import http.server
-import ffmpeg  # معالجة وحرق الترجمة السحابية
+from threading import Thread
 
-# إيقاف تحذيرات الشهادات لضمان استقرار الاتصال
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# إعداد توكن البوت
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4BXc")
+# ضع التوكن الخاص ببوتك هنا
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# مسار قاعدة بيانات الأصوات الآمن على Railway
-DB_FILE = "/tmp/voice_db.json" if os.path.exists("/tmp") else "voice_db.json"
-
-PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
-VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId/"
-
-user_states = {}
-user_data = {}
-
-# --- سيرفر وهمي لإبقاء Railway مستقراً ويمنع الـ Crash ---
-def run_dummy_server():
-    port = int(os.environ.get("PORT", 8080))
-    server_address = ('', port)
-    httpd = http.server.HTTPServer(server_address, http.server.SimpleHTTPRequestHandler)
-    print(f"📡 السيرفر الوهمي مستقر ويعمل على المنفذ: {port}")
-    httpd.serve_forever()
-
-# --- إدارة قاعدة بيانات الأصوات المحمية ---
-def load_db():
-    if not os.path.exists(DB_FILE) or os.path.getsize(DB_FILE) == 0:
-        return {}
-    with open(DB_FILE, 'r', encoding='utf-8') as f:
-        try: return json.load(f)
-        except: return {}
-
-def save_db(db):
-    try:
-        dir_name = os.path.dirname(DB_FILE)
-        if dir_name and not os.path.exists(dir_name):
-            os.makedirs(dir_name, exist_ok=True)
-        with open(DB_FILE, 'w', encoding='utf-8') as f: 
-            json.dump(db, f, indent=4, ensure_ascii=False)
-    except Exception as e:
-        print(f"تحذير حفظ قاعدة البيانات: {e}")
-
-# --- دالة حقن الرابط في الصورة ---
-def hide_link_in_metadata(image_path, link, output_path):
-    try:
-        img = Image.open(image_path).convert("RGB")
-        meta = PngImagePlugin.PngInfo()
-        meta.add_text("URL_LINK", link)
-        img.save(output_path, "PNG", pnginfo=meta)
-    except Exception as e:
-        print(f"خطأ ميتاداتا: {e}")
-
-# --- لوحات المفاتيح والتحكم ---
-def get_main_keyboard():
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        types.InlineKeyboardButton("🖼️ طلب رابط كاميرا الصور", callback_data="get_photo_link"),
-        types.InlineKeyboardButton("🎥 طلب رابط كاميرا الفيديو", callback_data="get_video_link"),
-        types.InlineKeyboardButton("🔒 حقن رابط في صورة", callback_data="inject_start"),
-        types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu")
-    )
-    return markup
-
-# لوحة اختيار لغات الترجمة المتعددة (تشمل العربية والترجمات العكسية)
-def get_subtitle_languages_markup():
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("🇩🇿 إلى العربية (AR)", callback_data="embed_ar"),
-        types.InlineKeyboardButton("🇫🇷 إلى الفرنسية (FR)", callback_data="embed_fr"),
-        types.InlineKeyboardButton("🇬🇧 إلى الإنجليزية (EN)", callback_data="embed_en"),
-        types.InlineKeyboardButton("🇪🇸 إلى الإسبانية (ES)", callback_data="embed_es"),
-        types.InlineKeyboardButton("🇹🇷 إلى التركية (TR)", callback_data="embed_tr")
-    )
-    markup.add(types.InlineKeyboardButton("🔙 عودة للقائمة الرئيسية", callback_data="main_menu"))
-    return markup
-
-# --- استقبال أمر البدء ---
-@bot.message_handler(commands=['start', 'help'])
+# 1. القائمة الترحيبية الاحترافية المتفق عليها (مع تنظيف الأزرار القديمة المعلقة)
+@bot.message_handler(commands=['start'])
 def send_welcome(message):
-    welcome_text = "🤖 **المطور سيف الدين يرحب بك في بوت الترجمة والمعالجة السحابي المطور!**\n\nأرسل فيديو الآن لتجربة نظام حرق الترجمات الاحترافي باللغة العربية واللغات العالمية."
-    bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
-
-# --- معالجة الأزرار والـ Callback Queries ---
-@bot.callback_query_handler(func=lambda call: True)
-def handle_query(call):
-    chat_id = call.message.chat.id
-    msg_id = call.message.message_id
-    db = load_db()
-
-    if call.data == "inject_start":
-        user_states[chat_id] = "waiting_for_image_inject"
-        bot.edit_message_text("أرسل الصورة الآن لحقن الرابط:", chat_id, msg_id)
-        
-    elif call.data in ["get_photo_link", "get_video_link"]:
-        link = f"{PHOTO_PAGE_URL}?chatId={chat_id}" if call.data == "get_photo_link" else f"{VIDEO_PAGE_URL}?chatId={chat_id}"
-        bot.send_message(chat_id, f"🔗 الرابط المطلوب:\n{link}")
-        
-    elif call.data == "voice_menu":
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(types.InlineKeyboardButton("👩 الفتاة 1", callback_data="girl_1_menu"))
-        markup.add(types.InlineKeyboardButton("🔙 عودة للقائمة الرئيسية", callback_data="main_menu"))
-        bot.edit_message_text("اختر المجلد المطلوب:", chat_id, msg_id, reply_markup=markup)
-        
-    elif call.data == "girl_1_menu":
-        if not db:
-            bot.answer_callback_query(call.id, "⚠️ لا توجد مقاطع محفوظة حالياً.")
-            return
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        for i in range(1, 11):
-            name = f"مقطع {i}"
-            if name in db: markup.add(types.InlineKeyboardButton(name, callback_data=f"play:{name}"))
-        markup.add(types.InlineKeyboardButton("🔙 عودة", callback_data="voice_menu"))
-        bot.edit_message_text("📂 مقاطع الفتاة 1 الكاملة:", chat_id, msg_id, reply_markup=markup)
-        
-    elif call.data in ["main_menu", "back_to_main"]:
-        bot.edit_message_text("المطور سيف الدين يرحب بك في بوت الترجمة والمعالجة السحابي المطور!", chat_id, msg_id, reply_markup=get_main_keyboard())
-        
-    elif call.data.startswith("play:"):
-        name = call.data.split(":")[1]
-        file_id = db.get(name)
-        if file_id:
-            try: bot.send_voice(chat_id, file_id)
-            except: bot.answer_callback_query(call.id, "❌ خطأ استدعاء الصوت.")
-        else: bot.answer_callback_query(call.id, "❌ غير متاح.")
-
-    # --- حرق الترجمة السحابية متعددة اللغات والعكسية (FFmpeg) ---
-    elif call.data.startswith("embed_"):
-        lang_code = call.data.split("_")[1]
-        
-        # تفاصيل الترجمة والنصوص المتزامنة (دعم كامل للترجمة من وإلى العربية وباقي اللغات)
-        lang_details = {
-            "ar": {"name": "العربية", "text": "[ ترجمة احترافية إلى اللغة العربية - فيلم قصير ]\n\n2\n00:00:05,000 --> 00:00:09,000\nتم حرق ودمج خط الترجمة العربي على الشاشة بنجاح عبر سيرفر ريلوي."},
-            "fr": {"name": "الفرنسية", "text": "[ Traduction en Français - Film Court ]\n\n2\n00:00:05,000 --> 00:00:09,000\nTexte gravé sur l'écran avec succès via Railway."},
-            "en": {"name": "الإنجليزية", "text": "[ English Translation - Short Film ]\n\n2\n00:00:05,000 --> 00:00:09,000\nText burned onto the screen successfully via Railway."},
-            "es": {"name": "الإسبانية", "text": "[ Traducción al Español - Cortometraje ]\n\n2\n00:00:05,000 --> 00:00:09,000\nTexto grabado en la pantalla con éxito a través de Railway."},
-            "tr": {"name": "التركية", "text": "[ Türkçe Çeviri - Kısa Film ]\n\n2\n00:00:05,000 --> 00:00:09,000\nMetin Railway aracılığıyla ekrana başarıyla yazdırıldı."}
-        }
-        
-        selected = lang_details.get(lang_code)
-        bot.edit_message_text(f"⚡ **جاري معالجة الفيديو وحرق ترجمة الأفلام ({selected['name']}) عبر FFmpeg السحابي...**", chat_id, msg_id)
-        
-        input_path = f"video_{chat_id}.mp4"
-        srt_path = f"sub_{chat_id}.srt"
-        output_path = f"output_{chat_id}.mp4"
-        
-        if not os.path.exists(input_path):
-            bot.send_message(chat_id, "❌ عذراً، لم يتم العثور على الفيديو الأصلي، يرجى إعادة إرساله.")
-            return
-
-        # توليد ملف الـ SRT بالتوقيت الاحترافي
-        srt_content = f"1\n00:00:01,000 --> 00:00:04,500\n{selected['text']}\n"
-        with open(srt_path, "w", encoding="utf-8") as f:
-            f.write(srt_content)
-            
-        try:
-            # دمج ملف الترجمة داخل الفيلم مباشرة
-            video_input = ffmpeg.input(input_path)
-            video_output = ffmpeg.output(video_input, output_path, vf=f"subtitles={srt_path}")
-            ffmpeg.run(video_output, overwrite_output=True)
-            
-            # إرسال الفيلم النهائي المترجم للمستخدم
-            bot.send_chat_action(chat_id, 'upload_video')
-            with open(output_path, "rb") as video_file:
-                bot.send_video(chat_id, video_file, caption=f"🎉 **تم إنتاج الفيلم وحرق الترجمة ({selected['name']}) داخل الشاشة بنجاح كالأفلام الاحترافية!**")
-                
-            # تنظيف الذاكرة المؤقتة للسيرفر فوراً لعدم امتلاء المساحة
-            if os.path.exists(input_path): os.remove(input_path)
-            if os.path.exists(srt_path): os.remove(srt_path)
-            if os.path.exists(output_path): os.remove(output_path)
-            
-        except Exception as e:
-            bot.send_message(chat_id, f"❌ خطأ في المعالجة السحابية لـ FFmpeg: {e}")
-
-# --- معالج استقبال الميديا العام ---
-@bot.message_handler(content_types=['photo', 'text', 'voice', 'video'])
-def handle_all_media(message):
-    chat_id = message.chat.id
-    state = user_states.get(chat_id)
-
-    # استقبال الفيديوهات والأفلام
-    if message.video:
-        bot.reply_to(message, "⏳ جاري استقبال ملف الفيديو وتهيئته للمعالجة السحابية... يرجى الانتظار ثوانٍ.")
-        file_info = bot.get_file(message.video.file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        
-        input_path = f"video_{chat_id}.mp4"
-        with open(input_path, "wb") as f:
-            f.write(downloaded_file)
-            
-        bot.send_message(chat_id, "🎬 **تم رفع الفيديو بنجاح!**\nاختر اتجاه الترجمة ونوع اللغة المُراد حرقها على الشاشة الآن:", reply_markup=get_subtitle_languages_markup())
-
-    # استقبال الأصوات وتخزينها
-    elif message.voice:
-        db = load_db()
-        next_slot = len(db) + 1
-        if next_slot > 10: db, next_slot = {}, 1
-        name = f"مقطع {next_slot}"
-        db[name] = message.voice.file_id
-        save_db(db)
-        bot.reply_to(message, f"✅ تم حفظ وتحديث ({name}) بنجاح داخل مجلد الفتاة 1!")
-
-    # استقبال الصور لحقن الروابط
-    elif state == "waiting_for_image_inject" and message.photo:
-        file_info = bot.get_file(message.photo[-1].file_id)
-        downloaded = bot.download_file(file_info.file_path)
-        img_path = os.path.join("/tmp" if os.path.exists("/tmp") else ".", f"img_{chat_id}.png")
-        with open(img_path, 'wb') as f: f.write(downloaded)
-        user_data[chat_id] = img_path
-        user_states[chat_id] = "waiting_for_link"
-        bot.reply_to(message, "تم حفظ الصورة بنجاح، أرسل الرابط الآن لحقنه:")
-
-    # استقبال روابط الحقن النصية
-    elif state == "waiting_for_link" and message.text:
-        img_path = user_data.get(chat_id)
-        out_path = os.path.join("/tmp" if os.path.exists("/tmp") else ".", f"out_{chat_id}.png")
-        hide_link_in_metadata(img_path, message.text, out_path)
-        if os.path.exists(out_path):
-            with open(out_path, 'rb') as f: 
-                bot.send_photo(chat_id, f, caption=f"✅ تم الحقن بنجاح!\nالرابط: {message.text}")
-        user_states[chat_id] = None
-        if os.path.exists(img_path): os.remove(img_path)
-        if os.path.exists(out_path): os.remove(out_path)
-
-if __name__ == '__main__':
-    # تشغيل السيرفر الوهمي لحماية منافذ Railway ومنع الـ Crash
-    threading.Thread(target=run_dummy_server, daemon=True).start()
+    welcome_text = (
+        "🤖 **المطور سيف الدين يرحب بك في بوت الترجمة والمعالجة السحابي المطور!**\n\n"
+        "أرسل فيديو الآن لتجربة نظام حرق الترجمات الاحترافي باللغة العربية واللغات العالمية."
+    )
     
-    print("⚡ بوت ترجمة الأفلام المدمج جاهز للانطلاق على منصة ريلوي...")
-    bot.polling(none_stop=True, interval=0, timeout=40)
+    # أولاً: نقوم بمسح أي كيبورد قديم معلق في شاشة المستخدم
+    clean_old_markup = types.ReplyKeyboardRemove(selective=False)
+    temp_msg = bot.send_message(message.chat.id, "🔄 جاري تنظيف الواجهة وتحديث الأزرار...", reply_markup=clean_old_markup)
+    bot.delete_message(message.chat.id, temp_msg.message_id)
+    
+    # ثانياً: إنشاء أزرار التحكم الأربعة النظيفة والمتفق عليها فقط بالأسفل
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    btn_image_cam = types.KeyboardButton("🖼️ طلب رابط كاميرا الصور")
+    btn_video_cam = types.KeyboardButton("🎬 طلب رابط كاميرا الفيديو")
+    btn_inject = types.KeyboardButton("🔒 حقن رابط في صورة")
+    btn_audio = types.KeyboardButton("🎧 قسم الصوتيات")
+    
+    markup.add(btn_image_cam, btn_video_cam, btn_inject, btn_audio)
+    
+    # إرسال الرسالة الترحيبية الرسمية مع الأزرار الجديدة فقط
+    bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
+
+# 2. دالة تحميل الفيديو الكبير على أجزاء وحرق الترجمة (لحماية البوت من الـ Timeout)
+def process_video_and_burn_subtitles(chat_id, file_id):
+    input_filename = f"input_{chat_id}.mp4"
+    output_filename = f"output_{chat_id}.mp4"
+    status_msg = None
+    
+    try:
+        status_msg = bot.send_message(chat_id, "⚡ **جاري تحميل الفيديو سحابياً على أجزاء بأمان... يرجى الانتظار**", parse_mode="Markdown")
+        
+        # الحصول على مسار الملف من التليجرام
+        file_info = bot.get_file(file_id)
+        file_path = file_info.file_path
+        
+        # رابط التحميل المباشر للملف لتجنب الـ Timeout التقليدي
+        download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+        
+        # تحميل الملف وحفظه مباشرة كتدفق (Stream) على أجزاء (Chunks) لحل مشكلة الملفات الكبيرة
+        import requests
+        with requests.get(download_url, stream=True) as r:
+            r.raise_for_status()
+            with open(input_filename, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    
+        # تحديث حالة الرسالة للمستخدم لبدء المعالجة بـ FFmpeg
+        bot.edit_message_text("🎬 **اكتمل التحميل بأمان! جاري الآن حرق الترجمة عبر FFmpeg السحابي...**", chat_id, status_msg.message_id, parse_mode="Markdown")
+        
+        # أمر FFmpeg لمعالجة وحرق الترجمة (يستخدم ملف subtitles.srt الافتراضي في مشروعك)
+        cmd = [
+            'ffmpeg', '-y', 
+            '-i', input_filename, 
+            '-vf', "subtitles=subtitles.srt:force_style='FontSize=16,PrimaryColour=&H00FFFFFF'", 
+            '-c:a', 'copy', 
+            output_filename
+        ]
+        
+        # تشغيل المعالجة
+        process = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # التأكد من نجاح إنتاج الفيديو المعالج
+        if os.path.exists(output_filename) and os.path.getsize(output_filename) > 0:
+            with open(output_filename, 'rb') as video_to_send:
+                bot.send_video(chat_id, video_to_send, caption="✅ تم الانتهاء من معالجة وحرق الترجمة بنجاح سحابياً!")
+            bot.delete_message(chat_id, status_msg.message_id)
+        else:
+            bot.edit_message_text("❌ حدث خطأ أثناء معالجة وحرق الترجمة داخل نظام FFmpeg.", chat_id, status_msg.message_id)
+            
+    except Exception as e:
+        print(f"Error: {e}")
+        if status_msg:
+            bot.edit_message_text(f"❌ حدث خطأ غير متوقع أثناء المعالجة:\n`{str(e)}`", chat_id, status_msg.message_id, parse_mode="Markdown")
+            
+    finally:
+        # تنظيف الملفات المؤقتة دائماً لعدم ملء مساحة السيرفر
+        if os.path.exists(input_filename): os.remove(input_filename)
+        if os.path.exists(output_filename): os.remove(output_filename)
+
+# 3. استقبال الفيديو وتشغيل المعالجة في الخلفية فوراً
+@bot.message_handler(content_types=['video'])
+def handle_video(message):
+    # تشغيل المعالجة في دالة منفصلة (Thread) ليبقى البوت سريعاً جداً ومستجيباً لباقي الأوامر
+    worker = Thread(target=process_video_and_burn_subtitles, args=(message.chat.id, message.video.file_id))
+    worker.start()
+
+# تشغيل البوت المستمر
+if __name__ == '__main__':
+    bot.infinity_polling()
