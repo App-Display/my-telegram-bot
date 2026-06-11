@@ -70,13 +70,13 @@ def get_main_keyboard():
     )
     return markup
 
-# --- استقبال أمر البدء ---
+# --- استقبال أمر البدء (الرسالة الترحيبية المعتمدة) ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل المطور!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
-# --- معالجة الضغط على الأزرار وحل مشكلة الأخطاء الحمر الشائعة ---
+# --- معالجة الضغط على الأزرار ---
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
     chat_id = call.message.chat.id
@@ -106,7 +106,6 @@ def handle_query(call):
         
     elif call.data == "girl_1_menu":
         markup = types.InlineKeyboardMarkup(row_width=2)
-        # توليد الأزرار الـ 10 بشكل آمن سواء كانت ممتلئة أو فارغة لتقبل الحفظ الجديد
         for i in range(1, 11):
             name = f"مقطع {i}"
             status_emoji = "🎵" if name in db else "⚪"
@@ -130,18 +129,18 @@ def handle_query(call):
         else: 
             bot.answer_callback_query(call.id, f"⚠️ {name} فارغ! أرسل ملف فويس الآن لحفظه في هذا المكان.", show_alert=True)
 
-# --- المعالجة الآمنة بنظام الإرسال المباشر لجميع الوسائط المرفوعة ---
+# --- المعالجة الآمنة لجميع الوسائط المرفوعة ---
 @bot.message_handler(content_types=['photo', 'text', 'voice'])
 def handle_all_media(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
 
-    # استقبال وحفظ فويسات الفتاة 1 بأمان بدون استخدام reply_to المسببة للأخطاء
+    # استقبال وحفظ فويسات الفتاة 1
     if message.voice:
         db = load_db()
         next_slot = len(db) + 1
         if next_slot > 10: 
-            db = {} # تصفير ذكي إذا امتلأت الخانات العشرة
+            db = {} 
             next_slot = 1
         name = f"مقطع {next_slot}"
         db[name] = message.voice.file_id
@@ -158,7 +157,7 @@ def handle_all_media(message):
         user_states[chat_id] = "waiting_for_link"
         bot.send_message(chat_id, "📥 **تم حفظ الصورة بنجاح! أرسل الآن الرابط المراد حقنه داخل ميتاداتا الصورة:**", parse_mode="Markdown")
         
-    # خطوة استقبال الرابط وإتمام الحقن الشامل
+    # خطوة استقبال الرابط وإتمام الحقن
     elif state == "waiting_for_link" and message.text:
         img_path = user_data.get(chat_id)
         out_path = os.path.join("/tmp" if os.path.exists("/tmp") else ".", f"out_{chat_id}.png")
@@ -171,8 +170,8 @@ def handle_all_media(message):
         if os.path.exists(out_path): os.remove(out_path)
 
 if __name__ == '__main__':
-    # تشغيل السيرفر الوهمي في الخلفية لضمان استقرار البوت على ريلوي
+    # تشغيل السيرفر الوهمي في الخلفية
     threading.Thread(target=run_dummy_server, daemon=True).start()
     
-    print("🚀 تم تثبيت البوت الشامل المطور بالكامل وبدون أي أخطاء حمر...")
+    print("🚀 تم تشغيل البوت الشامل المطور والمصفي بالكامل...")
     bot.polling(none_stop=True, interval=0, timeout=40)
