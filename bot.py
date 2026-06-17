@@ -101,7 +101,6 @@ def handle_query(call):
         bot.answer_callback_query(call.id)
         
     elif call.data == "translate_video_menu":
-        # عرض قائمة اللغات الـ 3 عند الضغط على زر الترجمة
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
             types.InlineKeyboardButton("🇸🇦 الترجمة إلى العربية", callback_data="lang:ar"),
@@ -114,7 +113,7 @@ def handle_query(call):
 
     elif call.data.startswith("lang:"):
         selected_lang = call.data.split(":")[1]
-        user_data[chat_id] = {"lang": selected_lang} # حفظ اللغة المختارة للمستخدم
+        user_data[chat_id] = {"lang": selected_lang}
         user_states[chat_id] = "waiting_for_video_translation"
         
         lang_names = {"ar": "العربية 🇸🇦", "fr": "الفرنسية 🇫🇷", "en": "الإنجليزية 🇬🇧"}
@@ -136,6 +135,7 @@ def handle_query(call):
         markup.add(types.InlineKeyboardButton("👩 الفتاة 1", callback_data="girl_1_menu"))
         markup.add(types.InlineKeyboardButton("🔙 عودة للقائمة الرئيسية", callback_data="main_menu"))
         bot.edit_message_text("اختر المجلد المطلوب:", chat_id=chat_id, message_id=msg_id, reply_markup=markup)
+        bot.answer_callback_query(call.id)
         
     elif call.data == "girl_1_menu":
         markup = types.InlineKeyboardMarkup(row_width=2)
@@ -145,10 +145,12 @@ def handle_query(call):
             markup.add(types.InlineKeyboardButton(f"{status_emoji} {name}", callback_data=f"play:{name}"))
         markup.add(types.InlineKeyboardButton("🔙 عودة", callback_data="voice_menu"))
         bot.edit_message_text("📂 مقاطع الفتاة 1 الكاملة والمتاحة للمعاينة:", chat_id=chat_id, message_id=msg_id, reply_markup=markup)
+        bot.answer_callback_query(call.id)
         
     elif call.data == "main_menu":
         welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل المطور!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
         bot.edit_message_text(welcome_text, chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=get_main_keyboard())
+        bot.answer_callback_query(call.id)
         
     elif call.data.startswith("play:"):
         name = call.data.split(":")[1]
@@ -160,7 +162,7 @@ def handle_query(call):
             except: 
                 bot.answer_callback_query(call.id, "❌ خطأ استدعاء الصوت من السيرفر.")
         else: 
-            bot.answer_callback_query(call.id, f"⚠️ {name} فارغ! أرسل ملف فويس الآن لحفظه في هذا المكان.", show_alert=True)
+            bot.answer_callback_query(call.id, f"⚠️ {name} فارغ! أرسل ملف فويس الآن لحفظه.", show_alert=True)
 
 # --- معالجة استقبال الفيديو وفق لغة الاختيار وحرقه ---
 @bot.message_handler(content_types=['photo', 'text', 'voice', 'video'])
@@ -169,7 +171,6 @@ def handle_all_media(message):
     state = user_states.get(chat_id)
 
     if message.video and state == "waiting_for_video_translation":
-        # جلب اللغة التي حددها المستخدم بالخطوة السابقة
         user_lang = user_data.get(chat_id, {}).get("lang", "ar")
         
         status_msg = bot.reply_to(message, "📥 تم استلام الفيديو على السيرفر! جاري تحميله والبدء بالمعالجة الفورية...")
@@ -202,7 +203,6 @@ def handle_all_media(message):
                 end_time = time_to_srt_format(segment['end'])
                 original_text = segment['text'].strip()
                 
-                # الترجمة للغة المحددة فقط
                 try:
                     translated_text = GoogleTranslator(source='auto', target=user_lang).translate(original_text)
                 except Exception:
@@ -272,5 +272,5 @@ def handle_all_media(message):
 
 if __name__ == '__main__':
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    print("🚀 تم تشغيل البوت الذكي بقائمة اختيار اللغات الثلاث...")
+    print("🚀 تم تشغيل البوت الذكي بنجاح وبدون أي أخطاء إملائية...")
     bot.polling(none_stop=True, interval=0, timeout=40)
