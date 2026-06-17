@@ -1,5 +1,3 @@
 pyTelegramBotAPI
-urllib3
+requests
 Pillow
-deep-translator
-openai-whisper
