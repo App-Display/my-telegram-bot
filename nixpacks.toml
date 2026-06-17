@@ -2,7 +2,10 @@
 nixPkgs = ["python311", "ffmpeg"]
 
 [phases.build]
-cmds = ["pip install -r requirements.txt"]
+cmds = [
+    "pip install -r requirements.txt",
+    "ln -s $(which ffmpeg) /usr/local/bin/ffmpeg || true"
+]
 
 [start]
 cmd = "python main.py"
