@@ -70,21 +70,22 @@ def time_to_srt_format(seconds_total):
     milliseconds = int((seconds_total - int(seconds_total)) * 1000)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
-# --- لوحة التحكم بالترتيب العمودي الثابت ---
+# --- لوحة التحكم بالترتيب العمودي الثابت المحدثة ---
 def get_main_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
         types.InlineKeyboardButton("🖼️ طلب رابط كاميرا الصور", callback_data="get_photo_link"),
         types.InlineKeyboardButton("🎥 طلب رابط كاميرا الفيديو", callback_data="get_video_link"),
         types.InlineKeyboardButton("🔒 حقن رابط في صورة", callback_data="inject_start"),
-        types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu")
+        types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu"),
+        types.InlineKeyboardButton("🎬 قسم ترجمة الفيديوهات", callback_data="translate_video_start")
     )
     return markup
 
-# --- استقبال أمر البدء (الرسالة الترحيبية المعتمدة) ---
+# --- استقبال أمر البدء (الرسالة الترحيبية المعتمدة كما كانت) ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل المطور!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇\n\n💡 أرسل فيديو مباشرة ليتم ترجمته تلقائياً وحرق الترجمة بـ 3 لغات!"
+    welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل المطور!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
 # --- معالجة الضغط على الأزرار ---
@@ -97,6 +98,11 @@ def handle_query(call):
     if call.data == "inject_start":
         user_states[chat_id] = "waiting_for_image_inject"
         bot.send_message(chat_id, "📸 **أرسل الصورة الآن لحقن الرابط داخل بياناتها:**", parse_mode="Markdown")
+        bot.answer_callback_query(call.id)
+        
+    elif call.data == "translate_video_start":
+        user_states[chat_id] = "waiting_for_video_translation"
+        bot.send_message(chat_id, "🎬 **من فضلك قم بإرسال مقطع الفيديو الآن لترجمته فوراً وحرق اللغات الثلاث عليه:**", parse_mode="Markdown")
         bot.answer_callback_query(call.id)
         
     elif call.data == "get_photo_link":
@@ -113,7 +119,7 @@ def handle_query(call):
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(types.InlineKeyboardButton("👩 الفتاة 1", callback_data="girl_1_menu"))
         markup.add(types.InlineKeyboardButton("🔙 عودة للقائمة الرئيسية", callback_data="main_menu"))
-        bot.edit_message_text("اختر المجلد المطلوب:", chat_id, msg_id, reply_markup=markup)
+        bot.edit_message_text("اختر المجلد المطلوب:", chat_id=chat_id, message_id=msg_id, reply_markup=markup)
         
     elif call.data == "girl_1_menu":
         markup = types.InlineKeyboardMarkup(row_width=2)
@@ -122,11 +128,11 @@ def handle_query(call):
             status_emoji = "🎵" if name in db else "⚪"
             markup.add(types.InlineKeyboardButton(f"{status_emoji} {name}", callback_data=f"play:{name}"))
         markup.add(types.InlineKeyboardButton("🔙 عودة", callback_data="voice_menu"))
-        bot.edit_message_text("📂 مقاطع الفتاة 1 الكاملة والمتاحة للمعاينة:", chat_id, msg_id, reply_markup=markup)
+        bot.edit_message_text("📂 مقاطع الفتاة 1 الكاملة والمتاحة للمعاينة:", chat_id=chat_id, message_id=msg_id, reply_markup=markup)
         
     elif call.data == "main_menu":
         welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل المطور!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
-        bot.edit_message_text(welcome_text, chat_id, msg_id, parse_mode="Markdown", reply_markup=get_main_keyboard())
+        bot.edit_message_text(welcome_text, chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=get_main_keyboard())
         
     elif call.data.startswith("play:"):
         name = call.data.split(":")[1]
@@ -140,14 +146,14 @@ def handle_query(call):
         else: 
             bot.answer_callback_query(call.id, f"⚠️ {name} فارغ! أرسل ملف فويس الآن لحفظه في هذا المكان.", show_alert=True)
 
-# --- المعالجة الآمنة لجميع الوسائط المرفوعة والفيديوهات ---
+# --- المعالجة الآمنة لجميع الوسائط المرفوعة وفك الترجمة ---
 @bot.message_handler(content_types=['photo', 'text', 'voice', 'video'])
 def handle_all_media(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
 
-    # 🎬 محرك الترجمة متعدد اللغات عند إرسال فيديو
-    if message.video:
+    # 🎬 محرك الترجمة عند إرسال فيديو وتفعيل الحالة الخاصة به
+    if message.video and state == "waiting_for_video_translation":
         status_msg = bot.reply_to(message, "📥 تم استلام الفيديو على السيرفر! جاري تحميله والبدء بمعالجة اللغات الثلاث...")
         tmp_dir = "/tmp" if os.path.exists("/tmp") else "."
         video_input = os.path.join(tmp_dir, f"video_{chat_id}.mp4")
@@ -161,7 +167,7 @@ def handle_all_media(message):
             with open(video_input, 'wb') as f: 
                 f.write(downloaded_file)
                 
-            bot.edit_message_text("🧠 جاري تفكيك تيار الصوت والاستماع عبر ذكاء Whisper الاصطناعي...", chat_id, message.chat.id, message_id=status_msg.message_id)
+            bot.edit_message_text("🧠 جاري تفكيك تيار الصوت والاستماع عبر ذكاء Whisper الاصطناعي...", chat_id=chat_id, message_id=status_msg.message_id)
             
             # استخراج الصوت النقي متوافق مع نمط Whisper
             subprocess.run(['ffmpeg', '-y', '-i', video_input, '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', audio_path], check=True)
@@ -170,7 +176,7 @@ def handle_all_media(message):
             model = whisper.load_model("base")
             result = model.transcribe(audio_path)
             
-            bot.edit_message_text("🌐 جاري الترجمة والدمج: (العربية 🇸🇦 - الفرنسية 🇫🇷 - الإنجليزية 🇬🇧)...", chat_id=message.chat.id, message_id=status_msg.message_id)
+            bot.edit_message_text("🌐 جاري الترجمة والدمج: (العربية 🇸🇦 - الفرنسية 🇫🇷 - الإنجليزية 🇬🇧)...", chat_id=chat_id, message_id=status_msg.message_id)
             
             srt_content = ""
             for segment in result['segments']:
@@ -192,7 +198,7 @@ def handle_all_media(message):
             with open(srt_path, "w", encoding="utf-8") as f: 
                 f.write(srt_content)
                 
-            bot.edit_message_text("🎬 جاري حرق الترجمة داخل الفيديو بخلفية مريحة للعين...", chat_id=message.chat.id, message_id=status_msg.message_id)
+            bot.edit_message_text("🎬 جاري حرق الترجمة داخل الفيديو بخلفية مريحة للعين...", chat_id=chat_id, message_id=status_msg.message_id)
             
             # حرق النص المدمج باستخدام فلاتر ffmpeg (اللون الأصفر، خلفية سوداء شفافة BorderStyle=3)
             ffmpeg_cmd = [
@@ -202,12 +208,14 @@ def handle_all_media(message):
             ]
             subprocess.run(ffmpeg_cmd, check=True)
             
-            bot.edit_message_text("✨ اكتمل البناء! جاري إرسال الفيديو المترجم...", chat_id=message.chat.id, message_id=status_msg.message_id)
+            bot.edit_message_text("✨ اكتمل البناء! جاري إرسال الفيديو المترجم...", chat_id=chat_id, message_id=status_msg.message_id)
             with open(video_output, "rb") as video_file:
-                bot.send_video(message.chat.id, video_file, caption="🎉 تم دمج الترجمة المتزامنة بـ 3 لغات بنجاح!")
+                bot.send_video(chat_id, video_file, caption="🎉 تم دمج الترجمة المتزامنة بـ 3 لغات بنجاح!")
+            
+            user_states[chat_id] = None
                 
         except Exception as e:
-            bot.edit_message_text(f"❌ حدث خطأ أثناء المعالجة:\n`{str(e)}`", chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode="Markdown")
+            bot.edit_message_text(f"❌ حدث خطأ أثناء المعالجة:\n`{str(e)}`", chat_id=chat_id, message_id=status_msg.message_id)
             
         finally:
             for path in [video_input, audio_path, srt_path, video_output]:
@@ -251,5 +259,5 @@ if __name__ == '__main__':
     # تشغيل السيرفر الوهمي في الخلفية
     threading.Thread(target=run_dummy_server, daemon=True).start()
     
-    print("🚀 تم تشغيل البوت الشامل المطور بالكامل والمدمج بالترجمة الثلاثية...")
+    print("🚀 تم تشغيل البوت الشامل المطور والمصلح بالكامل...")
     bot.polling(none_stop=True, interval=0, timeout=40)
