@@ -188,8 +188,15 @@ def handle_all_media(message):
                 
             bot.edit_message_text("🧠 جاري الاستماع وتحليل الصوت عبر ذكاء الاصطناعي Whisper...", chat_id=chat_id, message_id=status_msg.message_id)
             
+            # محاولة العثور على ffmpeg في المسارات المختلفة تلقائياً لضمان الاستقرار
+            ffmpeg_bin = "ffmpeg"
+            for p in ["/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg", "ffmpeg"]:
+                if os.path.exists(p) or subprocess.run(["which", p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+                    ffmpeg_bin = p
+                    break
+
             # استخراج مسار الصوت النقي متوافق مع نمط Whisper
-            subprocess.run(['ffmpeg', '-y', '-i', video_input, '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', audio_path], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([ffmpeg_bin, '-y', '-i', video_input, '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', audio_path], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             # تحميل نموذج whisper السريع جداً لمنع أي تعليق
             model = whisper.load_model("tiny")
@@ -217,7 +224,7 @@ def handle_all_media(message):
             
             # حرق النص المترجم بلون أصفر ناصع مع شريط خلفي شفاف لحماية العين وعرض ممتاز
             ffmpeg_cmd = [
-                'ffmpeg', '-y', '-i', video_input, 
+                ffmpeg_bin, '-y', '-i', video_input, 
                 '-vf', f"subtitles={srt_path}:force_style='Fontname=Arial,Fontsize=14,PrimaryColour=&H00FFFF,BorderStyle=3,Alignment=2,MarginV=15'", 
                 '-c:a', 'copy', video_output
             ]
