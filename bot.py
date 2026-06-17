@@ -6,6 +6,9 @@ from telebot import types
 from PIL import Image, PngImagePlugin
 import threading
 import http.server
+import subprocess
+import whisper
+from deep_translator import GoogleTranslator
 
 # إيقاف تحذيرات الشهادات لضمان استقرار الاتصال
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -59,6 +62,14 @@ def hide_link_in_metadata(image_path, link, output_path):
     except Exception as e:
         print(f"خطأ ميتاداتا: {e}")
 
+# --- دالة تحويل التوقيت إلى صيغة SRT ---
+def time_to_srt_format(seconds_total):
+    hours = int(seconds_total // 3600)
+    minutes = int((seconds_total % 3600) // 60)
+    seconds = int(seconds_total % 60)
+    milliseconds = int((seconds_total - int(seconds_total)) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
+
 # --- لوحة التحكم بالترتيب العمودي الثابت ---
 def get_main_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -73,7 +84,7 @@ def get_main_keyboard():
 # --- استقبال أمر البدء (الرسالة الترحيبية المعتمدة) ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل المطور!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
+    welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل المطور!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇\n\n💡 أرسل فيديو مباشرة ليتم ترجمته تلقائياً وحرق الترجمة بـ 3 لغات!"
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
 # --- معالجة الضغط على الأزرار ---
@@ -129,14 +140,81 @@ def handle_query(call):
         else: 
             bot.answer_callback_query(call.id, f"⚠️ {name} فارغ! أرسل ملف فويس الآن لحفظه في هذا المكان.", show_alert=True)
 
-# --- المعالجة الآمنة لجميع الوسائط المرفوعة ---
-@bot.message_handler(content_types=['photo', 'text', 'voice'])
+# --- المعالجة الآمنة لجميع الوسائط المرفوعة والفيديوهات ---
+@bot.message_handler(content_types=['photo', 'text', 'voice', 'video'])
 def handle_all_media(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
 
+    # 🎬 محرك الترجمة متعدد اللغات عند إرسال فيديو
+    if message.video:
+        status_msg = bot.reply_to(message, "📥 تم استلام الفيديو على السيرفر! جاري تحميله والبدء بمعالجة اللغات الثلاث...")
+        tmp_dir = "/tmp" if os.path.exists("/tmp") else "."
+        video_input = os.path.join(tmp_dir, f"video_{chat_id}.mp4")
+        audio_path = os.path.join(tmp_dir, f"audio_{chat_id}.wav")
+        srt_path = os.path.join(tmp_dir, f"subs_{chat_id}.srt")
+        video_output = os.path.join(tmp_dir, f"output_{chat_id}.mp4")
+        
+        try:
+            file_info = bot.get_file(message.video.file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+            with open(video_input, 'wb') as f: 
+                f.write(downloaded_file)
+                
+            bot.edit_message_text("🧠 جاري تفكيك تيار الصوت والاستماع عبر ذكاء Whisper الاصطناعي...", chat_id, message.chat.id, message_id=status_msg.message_id)
+            
+            # استخراج الصوت النقي متوافق مع نمط Whisper
+            subprocess.run(['ffmpeg', '-y', '-i', video_input, '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', audio_path], check=True)
+            
+            # تحميل النموذج ومعالجة الصوت
+            model = whisper.load_model("base")
+            result = model.transcribe(audio_path)
+            
+            bot.edit_message_text("🌐 جاري الترجمة والدمج: (العربية 🇸🇦 - الفرنسية 🇫🇷 - الإنجليزية 🇬🇧)...", chat_id=message.chat.id, message_id=status_msg.message_id)
+            
+            srt_content = ""
+            for segment in result['segments']:
+                start_time = time_to_srt_format(segment['start'])
+                end_time = time_to_srt_format(segment['end'])
+                original_text = segment['text'].strip()
+                
+                try:
+                    text_ar = GoogleTranslator(source='auto', target='ar').translate(original_text)
+                    text_fr = GoogleTranslator(source='auto', target='fr').translate(original_text)
+                    text_en = GoogleTranslator(source='auto', target='en').translate(original_text)
+                except Exception:
+                    text_ar, text_fr, text_en = original_text, original_text, original_text
+                
+                # دمج الأسطر الثلاثة فوق بعضها
+                combined_text = f"{text_ar}\\n{text_fr}\\n{text_en}"
+                srt_content += f"{segment['id'] + 1}\n{start_time} --> {end_time}\n{combined_text}\n\n"
+                
+            with open(srt_path, "w", encoding="utf-8") as f: 
+                f.write(srt_content)
+                
+            bot.edit_message_text("🎬 جاري حرق الترجمة داخل الفيديو بخلفية مريحة للعين...", chat_id=message.chat.id, message_id=status_msg.message_id)
+            
+            # حرق النص المدمج باستخدام فلاتر ffmpeg (اللون الأصفر، خلفية سوداء شفافة BorderStyle=3)
+            ffmpeg_cmd = [
+                'ffmpeg', '-y', '-i', video_input, 
+                '-vf', f"subtitles={srt_path}:force_style='Fontname=Arial,Fontsize=14,PrimaryColour=&H00FFFF,BorderStyle=3,Alignment=2,MarginV=15'", 
+                '-c:a', 'copy', video_output
+            ]
+            subprocess.run(ffmpeg_cmd, check=True)
+            
+            bot.edit_message_text("✨ اكتمل البناء! جاري إرسال الفيديو المترجم...", chat_id=message.chat.id, message_id=status_msg.message_id)
+            with open(video_output, "rb") as video_file:
+                bot.send_video(message.chat.id, video_file, caption="🎉 تم دمج الترجمة المتزامنة بـ 3 لغات بنجاح!")
+                
+        except Exception as e:
+            bot.edit_message_text(f"❌ حدث خطأ أثناء المعالجة:\n`{str(e)}`", chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode="Markdown")
+            
+        finally:
+            for path in [video_input, audio_path, srt_path, video_output]:
+                if os.path.exists(path): os.remove(path)
+
     # استقبال وحفظ فويسات الفتاة 1
-    if message.voice:
+    elif message.voice:
         db = load_db()
         next_slot = len(db) + 1
         if next_slot > 10: 
@@ -173,5 +251,5 @@ if __name__ == '__main__':
     # تشغيل السيرفر الوهمي في الخلفية
     threading.Thread(target=run_dummy_server, daemon=True).start()
     
-    print("🚀 تم تشغيل البوت الشامل المطور والمصفي بالكامل...")
+    print("🚀 تم تشغيل البوت الشامل المطور بالكامل والمدمج بالترجمة الثلاثية...")
     bot.polling(none_stop=True, interval=0, timeout=40)
