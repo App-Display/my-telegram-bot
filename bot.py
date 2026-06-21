@@ -39,10 +39,15 @@ def run_dummy_server():
 # --- إدارة قاعدة البيانات لحفظ مقاطع الصوت ---
 def load_db():
     if not os.path.exists(DB_FILE) or os.path.getsize(DB_FILE) == 0:
-        return {}
+        return {"girl_1": {}, "girl_2": {}}
     with open(DB_FILE, 'r', encoding='utf-8') as f:
-        try: return json.load(f)
-        except: return {}
+        try:
+            data = json.load(f)
+            if "girl_1" not in data:
+                data = {"girl_1": data, "girl_2": {}}
+            return data
+        except:
+            return {"girl_1": {}, "girl_2": {}}
 
 def save_db(db):
     try:
@@ -80,14 +85,10 @@ def get_main_keyboard():
 def send_welcome(message):
     welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
     
-    # هنا نقوم بإنشاء أمر إزالة لوحة المفاتيح تماماً من مكان الكيبورد
     remove_keyboard = types.ReplyKeyboardRemove(selective=False)
-    
-    # نرسل أولاً رسالة سريعة ومخفية لتنظيف الواجهة وحذف القائمة السفلية العالقة
     cleanup_msg = bot.send_message(message.chat.id, "🔄 جاري تهيئة وتنظيف القوائم...", reply_markup=remove_keyboard)
     bot.delete_message(message.chat.id, cleanup_msg.message_id)
     
-    # الآن نرسل القائمة العمودية النظيفة تحت الرسالة فقط
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
 # --- معالجة الضغط على الأزرار (Callback Query) ---
@@ -114,37 +115,67 @@ def handle_query(call):
         
     elif call.data == "voice_menu":
         markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(types.InlineKeyboardButton("👩 الفتاة 1", callback_data="girl_1_menu"))
-        markup.add(types.InlineKeyboardButton("🔙 عودة للقائمة الرئيسية", callback_data="main_menu"))
-        bot.edit_message_text("اختر المجلد المطلوب:", chat_id=chat_id, message_id=msg_id, reply_markup=markup)
+        markup.add(
+            types.InlineKeyboardButton("👩 الفتاة 1", callback_data="girl_1_menu"),
+            types.InlineKeyboardButton("👩 الفتاة 2", callback_data="girl_2_menu"),
+            types.InlineKeyboardButton("🔙 عودة للقائمة الرئيسية", callback_data="main_menu")
+        )
+        bot.edit_message_text("اختر المجلد المطلوب للتعديل أو الاستماع:", chat_id=chat_id, message_id=msg_id, reply_markup=markup)
         bot.answer_callback_query(call.id)
         
     elif call.data == "girl_1_menu":
+        user_states[chat_id] = "active_girl_1"
         markup = types.InlineKeyboardMarkup(row_width=2)
-        for i in range(1, 11):
+        girl_db = db.get("girl_1", {})
+        for i in range(1, 11): # الفتاة 1 تحتوي على 10 مقاطع
             name = f"مقطع {i}"
-            status_emoji = "🎵" if name in db else "⚪"
-            markup.add(types.InlineKeyboardButton(f"{status_emoji} {name}", callback_data=f"play:{name}"))
+            status_emoji = "🎵" if name in girl_db else "⚪"
+            markup.add(types.InlineKeyboardButton(f"{status_emoji} {name}", callback_data=f"play_g1:{name}"))
         markup.add(types.InlineKeyboardButton("🔙 عودة", callback_data="voice_menu"))
-        bot.edit_message_text("📂 مقاطع الفتاة 1 الكاملة والمتاحة للمعاينة:", chat_id=chat_id, message_id=msg_id, reply_markup=markup)
+        bot.edit_message_text("📂 مجلد الفتاة 1 (10 مقاطع) - أرسل أي فويس لتحديث الخانة المتاحة:", chat_id=chat_id, message_id=msg_id, reply_markup=markup)
+        bot.answer_callback_query(call.id)
+
+    elif call.data == "girl_2_menu":
+        user_states[chat_id] = "active_girl_2"
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        girl_db = db.get("girl_2", {})
+        for i in range(1, 14): # تم التعديل هنا لتظهر 13 مقطعاً كاملاً للفتاة 2
+            name = f"مقطع {i}"
+            status_emoji = "🎵" if name in girl_db else "⚪"
+            markup.add(types.InlineKeyboardButton(f"{status_emoji} {name}", callback_data=f"play_g2:{name}"))
+        markup.add(types.InlineKeyboardButton("🔙 عودة", callback_data="voice_menu"))
+        bot.edit_message_text("📂 مجلد الفتاة 2 (13 مقطعاً) - أرسل أي فويس لتحديث الخانة المتاحة:", chat_id=chat_id, message_id=msg_id, reply_markup=markup)
         bot.answer_callback_query(call.id)
         
     elif call.data == "main_menu":
+        user_states[chat_id] = None
         welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
         bot.edit_message_text(welcome_text, chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=get_main_keyboard())
         bot.answer_callback_query(call.id)
         
-    elif call.data.startswith("play:"):
+    elif call.data.startswith("play_g1:"):
         name = call.data.split(":")[1]
-        file_id = db.get(name)
+        file_id = db.get("girl_1", {}).get(name)
         if file_id:
             try: 
                 bot.send_voice(chat_id, file_id)
                 bot.answer_callback_query(call.id)
             except: 
-                bot.answer_callback_query(call.id, "❌ خطأ في استدعاء الصوت من السيرفر.")
+                bot.answer_callback_query(call.id, "❌ خطأ في استدعاء الصوت.")
         else: 
-            bot.answer_callback_query(call.id, f"⚠️ {name} فارغ! أرسل ملف فويس الآن لحفظه في هذا المكان.", show_alert=True)
+            bot.answer_callback_query(call.id, f"⚠️ {name} في مجلد الفتاة 1 فارغ! أرسل ملف فويس لحفظه هنا.", show_alert=True)
+
+    elif call.data.startswith("play_g2:"):
+        name = call.data.split(":")[1]
+        file_id = db.get("girl_2", {}).get(name)
+        if file_id:
+            try: 
+                bot.send_voice(chat_id, file_id)
+                bot.answer_callback_query(call.id)
+            except: 
+                bot.answer_callback_query(call.id, "❌ خطأ في استدعاء الصوت.")
+        else: 
+            bot.answer_callback_query(call.id, f"⚠️ {name} في مجلد الفتاة 2 فارغ! أرسل ملف فويس لحفظه هنا.", show_alert=True)
 
 # --- معالجة الرسائل والوسائط الواردة (فويس، صور، نصوص) ---
 @bot.message_handler(content_types=['photo', 'text', 'voice'])
@@ -154,14 +185,23 @@ def handle_all_media(message):
 
     if message.voice:
         db = load_db()
-        next_slot = len(db) + 1
-        if next_slot > 10: 
-            db = {} 
+        if state == "active_girl_2":
+            target = "girl_2"
+            max_slots = 13 # السعة القصوى المحددة للفتاة 2
+            folder_name = "مجلد الفتاة 2"
+        else:
+            target = "girl_1"
+            max_slots = 10 # السعة القصوى للفتاة 1
+            folder_name = "مجلد الفتاة 1"
+
+        next_slot = len(db[target]) + 1
+        if next_slot > max_slots: 
+            db[target] = {} 
             next_slot = 1
         name = f"مقطع {next_slot}"
-        db[name] = message.voice.file_id
+        db[target][name] = message.voice.file_id
         save_db(db)
-        bot.send_message(chat_id, f"✅ **تم حفظ وتحديث ({name}) بنجاح داخل مجلد الفتاة 1!**", parse_mode="Markdown")
+        bot.send_message(chat_id, f"✅ **تم حفظ وتحديث ({name}) بنجاح داخل {folder_name}!**", parse_mode="Markdown")
         
     elif state == "waiting_for_image_inject" and message.photo:
         file_info = bot.get_file(message.photo[-1].file_id)
@@ -193,5 +233,5 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"تنبيه تهيئة: {e}")
 
-    print("🚀 تم تعديل البوت وحذف القائمة السفلية المزعجة نهائياً عند التشغيل...")
+    print("🚀 البوت يعمل وجاهز، تم تحديث خانات الفتاة 2 لتستوعب 13 مقطعاً بنجاح...")
     bot.polling(none_stop=True, interval=0, timeout=50)
