@@ -1,5 +1,5 @@
-openai-whisper
-ffmpeg-python
+pyTelegramBotAPI
+feedparser
+yt-dlp
+Pillow
 deep-translator
-python-telegram-bot
-torch
