@@ -1,6 +1,5 @@
 pyTelegramBotAPI
-feedparser
 yt-dlp
+google-generativeai
 Pillow
-deep-translator
-anthropic
+urllib3
