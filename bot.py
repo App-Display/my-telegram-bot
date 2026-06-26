@@ -13,72 +13,62 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4BXc")
 bot = telebot.TeleBot(BOT_TOKEN)
 
-DB_FILE = "/tmp/voice_db.json"
-PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
-VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
-IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.app-c.html-chatld-/"
-
 user_states = {}
 
-def run_dummy_server():
-    port = int(os.environ.get("PORT", 8080))
-    httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
-    httpd.serve_forever()
+# --- دالة تحميل قوية ---
+def download_video_sync(url, chat_id):
+    try:
+        # إعدادات لضمان عدم فشل التحميل
+        ydl_opts = {
+            'format': 'best[ext=mp4]/best',
+            'outtmpl': f'/tmp/vid_{chat_id}.mp4',
+            'quiet': True,
+            'no_warnings': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+            return f'/tmp/vid_{chat_id}.mp4'
+    except Exception as e:
+        return None
 
-def load_db():
-    if not os.path.exists(DB_FILE): return {"girl_1": {}, "girl_2": {}}
-    with open(DB_FILE, 'r', encoding='utf-8') as f:
-        try: return json.load(f)
-        except: return {"girl_1": {}, "girl_2": {}}
-
-def get_main_keyboard():
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        types.InlineKeyboardButton("🖼️ رابط صور", callback_data="get_photo_link"),
-        types.InlineKeyboardButton("🎥 رابط فيديو", callback_data="get_video_link"),
-        types.InlineKeyboardButton("✨ رابط تعديل", callback_data="get_image_edit_link"),
-        types.InlineKeyboardButton("📥 تحميل فيديو", callback_data="dl_video"),
-        types.InlineKeyboardButton("🌐 أخبار وبث مباشر", callback_data="news_menu"),
-        types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu")
-    )
-    return markup
-
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    # الترحيب المعدل كما طلبت
-    bot.send_message(message.chat.id, "👋 أهلاً بك، المطور سيف الدين يرحب بك!", reply_markup=get_main_keyboard())
-
-@bot.callback_query_handler(func=lambda call: True)
-def handle_query(call):
-    chat_id = call.message.chat.id
-    
-    if call.data == "news_menu":
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(
-            types.InlineKeyboardButton("🔴 الجزيرة مباشر", web_app=types.WebAppInfo(url="https://www.aljazeera.net/live")),
-            types.InlineKeyboardButton("🔴 BBC عربي", web_app=types.WebAppInfo(url="https://www.youtube.com/live/yNXBL-e7C9A")),
-            types.InlineKeyboardButton("🔴 RT عربي", web_app=types.WebAppInfo(url="https://www.youtube.com/live/wL-E4-Wc_eQ")),
-            types.InlineKeyboardButton("🔙 عودة", callback_data="main_menu")
-        )
-        bot.edit_message_text("🌐 البث المباشر (سيفتح داخل البوت):", chat_id, call.message.message_id, reply_markup=markup)
-    
-    elif call.data == "dl_video":
-        user_states[chat_id] = "waiting_for_url"
-        bot.edit_message_text("أرسل رابط الفيديو الآن:", chat_id, call.message.message_id)
-    
-    elif call.data == "main_menu":
-        bot.edit_message_text("🤖 القائمة الرئيسية:", chat_id, call.message.message_id, reply_markup=get_main_keyboard())
-    
-    # ... (باقي كود الصوتيات والحقن كما كان لديك) ...
-    bot.answer_callback_query(call.id)
-
+# --- معالجة الرسائل النصية (التحميل) ---
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     chat_id = message.chat.id
+    
+    # التحقق مما إذا كان المستخدم في حالة انتظار رابط
     if user_states.get(chat_id) == "waiting_for_url":
-        bot.reply_to(message, "⏳ جاري التحميل...")
-        user_states[chat_id] = None
+        status_msg = bot.reply_to(message, "⏳ جاري التحميل، يرجى الانتظار...")
+        
+        file_path = download_video_sync(message.text, chat_id)
+        
+        if file_path and os.path.exists(file_path):
+            try:
+                with open(file_path, 'rb') as video:
+                    bot.send_video(chat_id, video, caption="✅ تم التحميل بنجاح!")
+                bot.delete_message(chat_id, status_msg.message_id)
+                os.remove(file_path)
+            except Exception as e:
+                bot.edit_message_text(f"❌ خطأ أثناء الإرسال: {e}", chat_id, status_msg.message_id)
+        else:
+            bot.edit_message_text("❌ فشل التحميل، تأكد من الرابط وحاول مجدداً.", chat_id, status_msg.message_id)
+        
+        user_states[chat_id] = None # إعادة الحالة
+    
+    # إذا لم يكن في حالة انتظار، تجاهل النص أو أضف أوامر أخرى
+    elif message.text == "/start":
+        pass 
 
+# --- معالجة الأزرار ---
+@bot.callback_query_handler(func=lambda call: True)
+def handle_query(call):
+    chat_id = call.message.chat.id
+    if call.data == "dl_video":
+        user_states[chat_id] = "waiting_for_url"
+        bot.edit_message_text("📥 أرسل رابط الفيديو الآن (يوتيوب/تيك توك/إنستغرام):", chat_id, call.message.message_id)
+    # ... (باقي كود الأزرار) ...
+    bot.answer_callback_query(call.id)
+
+# ابدأ البوت
 if __name__ == '__main__':
-    threading.Thread(target=run_dummy_server, daemon=True).start()
     bot.polling(none_stop=True)
