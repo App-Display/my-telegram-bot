@@ -1,5 +1,5 @@
-pyTelegramBotAPI
-yt-dlp
-Pillow
-urllib3
-
+openai-whisper
+ffmpeg-python
+deep-translator
+python-telegram-bot
+torch
