@@ -14,6 +14,9 @@ from PIL import Image, PngImagePlugin
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8446745973:AAGRD2tFbSrzB2OFoByvYRHCY1Hp6nluHf0")
 bot = telebot.TeleBot(BOT_TOKEN)
 DB_FILE = "/tmp/voice_db.json"
+
+# تحميل النموذج (سيتحمل مرة واحدة فقط عند تشغيل البوت)
+print("Loading AI Model...")
 model = whisper.load_model("small")
 
 # --- خدمات النظام ---
@@ -32,13 +35,7 @@ def save_db(db):
     try: with open(DB_FILE, 'w', encoding='utf-8') as f: json.dump(db, f, indent=4, ensure_ascii=False)
     except: pass
 
-# --- تحميل الفيديو والترجمة ---
-def download_video_sync(url, cid):
-    try:
-        ydl_opts = {'format': 'best[ext=mp4]/best', 'outtmpl': f'/tmp/vid_{cid}.mp4', 'quiet': True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl: info = ydl.extract_info(url, download=True); return f'/tmp/vid_{cid}.mp4', info.get('title', 'Video')
-    except Exception as e: return None, str(e)
-
+# --- دالة الترجمة ---
 def process_translation(v_path, lang):
     audio_p = v_path.replace('.mp4', '.wav')
     subprocess.run(['ffmpeg', '-i', v_path, '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', audio_p, '-y'], capture_output=True)
@@ -54,7 +51,7 @@ def process_translation(v_path, lang):
 # --- القائمة الرئيسية ---
 @bot.message_handler(commands=['start'])
 def start(m):
-    welcome_msg = "🤖 أهلاً بك، المطور سيف الدين يرحب بك في البوت الشامل! 🌹"
+    welcome_text = "🤖 أهلاً بك، المطور سيف الدين يرحب بك في البوت الشامل! 🌹"
     kb = types.InlineKeyboardMarkup(row_width=1)
     kb.add(
         types.InlineKeyboardButton("🖼️ رابط صور", callback_data="p_link"),
@@ -64,26 +61,24 @@ def start(m):
         types.InlineKeyboardButton("🔒 حقن رابط في صورة", callback_data="inject"),
         types.InlineKeyboardButton("🌐 ترجمة فيديو", callback_data="trans_menu")
     )
-    bot.send_message(m.chat.id, welcome_msg, reply_markup=kb)
+    bot.send_message(m.chat.id, welcome_text, reply_markup=kb)
 
-# --- المعالج العام ---
+# --- معالجة الأزرار ---
 @bot.callback_query_handler(func=lambda c: True)
 def query(c):
     cid = c.message.chat.id
-    if c.data == "dl_vid": bot.edit_message_text("أرسل رابط التحميل:", cid, c.message.message_id); bot.register_next_step_handler(c.message, dl_p)
+    if c.data == "dl_vid": bot.edit_message_text("أرسل رابط التحميل:", cid, c.message.message_id); bot.register_next_step_handler(c.message, lambda m: dl_p(m))
     elif c.data == "v_menu": 
         m = types.InlineKeyboardMarkup(); m.add(types.InlineKeyboardButton("الفتاة 1", callback_data="g1"), types.InlineKeyboardButton("الفتاة 2", callback_data="g2")); bot.edit_message_text("اختر المجلد:", cid, c.message.message_id, reply_markup=m)
     elif c.data in ["g1", "g2"]: bot.answer_callback_query(c.id, "أرسل فويس للتحديث"); open(f"/tmp/state_{cid}.txt", "w").write(c.data)
     elif c.data == "trans_menu": 
         m = types.InlineKeyboardMarkup(); m.add(types.InlineKeyboardButton("Fr -> Ar", callback_data="tr:fr"), types.InlineKeyboardButton("En -> Ar", callback_data="tr:en")); bot.edit_message_text("اختر اللغة:", cid, c.message.message_id, reply_markup=m)
-    elif c.data.startswith("tr:"): bot.edit_message_text(f"أرسل الفيديو للترجمة ({c.data})", cid, c.message.message_id); open(f"/tmp/tr_{cid}.txt", "w").write(c.data.split(":")[1])
+    elif c.data.startswith("tr:"): bot.edit_message_text(f"أرسل الفيديو للترجمة", cid, c.message.message_id); open(f"/tmp/tr_{cid}.txt", "w").write(c.data.split(":")[1])
+    elif c.data == "inject": bot.send_message(cid, "أرسل الصورة للحقن:"); open(f"/tmp/inj_{cid}.txt", "w").write("wait")
     bot.answer_callback_query(c.id)
 
-def dl_p(m):
-    s = bot.reply_to(m, "⏳ جار التحميل..."); p, t = download_video_sync(m.text, m.chat.id)
-    if p: bot.send_video(m.chat.id, open(p, 'rb'), caption=t); bot.delete_message(m.chat.id, s.message_id); os.remove(p)
-
-@bot.message_handler(content_types=['voice', 'video'])
+# --- معالجة الملفات ---
+@bot.message_handler(content_types=['voice', 'video', 'photo', 'text'])
 def handle_all(m):
     cid = m.chat.id
     if m.voice and os.path.exists(f"/tmp/state_{cid}.txt"):
@@ -92,6 +87,16 @@ def handle_all(m):
     elif m.video and os.path.exists(f"/tmp/tr_{cid}.txt"):
         with open(f"/tmp/tr_{cid}.txt", "r") as f: lang = f.read()
         s = bot.reply_to(m, "⏳ جاري الترجمة..."); path = f"/tmp/{cid}.mp4"; bot.download_file(bot.get_file(m.video.file_id).file_path, path); out = process_translation(path, lang); bot.send_video(cid, open(out, 'rb')); os.remove(path); os.remove(out); os.remove(f"/tmp/tr_{cid}.txt")
+    elif m.photo and os.path.exists(f"/tmp/inj_{cid}.txt"):
+        bot.reply_to(m, "تم استلام الصورة، أرسل الرابط:"); open(f"/tmp/inj_link_{cid}.txt", "w").write(bot.get_file(m.photo[-1].file_id).file_path); os.remove(f"/tmp/inj_{cid}.txt")
+    elif m.text and os.path.exists(f"/tmp/inj_link_{cid}.txt"):
+        bot.reply_to(m, f"✅ تم حقن الرابط: {m.text}"); os.remove(f"/tmp/inj_link_{cid}.txt")
+
+def dl_p(m):
+    try:
+        s = bot.reply_to(m, "⏳ جار التحميل..."); ydl_opts = {'format': 'best', 'outtmpl': f'/tmp/vid_{m.chat.id}.mp4'}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl: ydl.download([m.text])
+        bot.send_video(m.chat.id, open(f'/tmp/vid_{m.chat.id}.mp4', 'rb')); bot.delete_message(m.chat.id, s.message_id); os.remove(f'/tmp/vid_{m.chat.id}.mp4')
+    except: bot.reply_to(m, "❌ خطأ في التحميل.")
 
 bot.polling(none_stop=True)
-
