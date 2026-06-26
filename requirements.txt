@@ -1,3 +1,4 @@
 pyTelegramBotAPI
-urllib3
+yt-dlp
 Pillow
+urllib3
