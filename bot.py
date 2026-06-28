@@ -33,7 +33,7 @@ def load_db():
         try: return json.load(f)
         except: return {"girl_1": {}, "girl_2": {}}
 
-# --- دالة التحميل المحدثة والمصلحة ---
+# --- دالة التحميل (مصلحة فقط) ---
 def download_video_sync(url, chat_id):
     try:
         file_path = f'/tmp/vid_{chat_id}.mp4'
@@ -43,8 +43,8 @@ def download_video_sync(url, chat_id):
             'quiet': True,
             'no_warnings': True,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            'referer': 'https://www.google.com/',  # إضافة لتجاوز حماية المواقع
-            'nocheckcertificate': True             # إضافة لتجاوز مشاكل الأمان
+            'referer': 'https://www.google.com/', 
+            'nocheckcertificate': True
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             if os.path.exists(file_path): os.remove(file_path)
