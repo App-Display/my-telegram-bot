@@ -26,19 +26,18 @@ def run_dummy_server():
     httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
     httpd.serve_forever()
 
-# --- دالة التحميل المصلحة ---
+# --- دالة التحميل المصلحة (تستخدم ملف cookies.txt) ---
 def download_video_sync(url, chat_id):
     try:
         file_path = f'/tmp/vid_{chat_id}.mp4'
-        # التعديل هنا: استخدام التنسيق المتوافق مع الكود السابق + الترويسات الصحيحة
+        # تأكد من رفع ملف باسم cookies.txt في نفس مجلد البوت
         ydl_opts = {
-            'format': 'best[ext=mp4]/best',
+            'format': 'best',
             'outtmpl': file_path,
             'quiet': True,
             'no_warnings': True,
+            'cookiefile': 'cookies.txt', 
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-            'referer': 'https://www.instagram.com/',
-            'nocheckcertificate': True,
             'geo_bypass': True
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -111,7 +110,7 @@ def handle_text(message):
             bot.delete_message(chat_id, status_msg.message_id)
             os.remove(path)
         else:
-            bot.edit_message_text(f"❌ فشل التحميل. تأكد من صحة الرابط.", chat_id, status_msg.message_id)
+            bot.edit_message_text(f"❌ فشل التحميل. يرجى التأكد من رفع ملف cookies.txt", chat_id, status_msg.message_id)
         user_states[chat_id] = None
 
 if __name__ == '__main__':
