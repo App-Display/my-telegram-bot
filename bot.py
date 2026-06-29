@@ -9,7 +9,7 @@ import yt_dlp
 # إيقاف التحذيرات
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-BOT_TOKEN = "8128965245:AAGolmLae3ALVga_kcloXCK2zsFRODK4BXc"
+BOT_TOKEN = 8128965245:AAGFL_UkvpiK9j8_qUcvvajrAvchwPiNTfw
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # الروابط المستقلة
