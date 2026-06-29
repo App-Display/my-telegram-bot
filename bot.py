@@ -9,7 +9,10 @@ import yt_dlp
 # إيقاف التحذيرات
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-BOT_TOKEN = "8128965245:AAHZ0LIhLWdJ5WcE9-joCLJkOrScPmPBCXs"
+# --- إعداد التوكن ---
+# تأكد من إضافة BOT_TOKEN في إعدادات البيئة (Environment Variables) في موقع الاستضافة
+BOT_TOKEN = "8128965245:AAHZ0LIhLWdJ5WcE9- joCLJkOrScPmPBCXs"
+os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # الروابط المستقلة
@@ -26,27 +29,38 @@ def run_dummy_server():
     httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
     httpd.serve_forever()
 
-# --- دالة التحميل المصلحة (تستخدم ملف cookies.txt) ---
+# --- دالة التحميل المحدثة والمحسنة ---
 def download_video_sync(url, chat_id):
     try:
         file_path = f'/tmp/vid_{chat_id}.mp4'
-        # تأكد من رفع ملف باسم cookies.txt في نفس مجلد البوت
+        # الإعدادات المحدثة لتجاوز الحظر
         ydl_opts = {
-            'format': 'best',
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'outtmpl': file_path,
             'quiet': True,
             'no_warnings': True,
             'cookiefile': 'cookies.txt', 
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-            'geo_bypass': True
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/126.0.0.0',
+            'referer': 'https://www.instagram.com/',
+            'geo_bypass': True,
+            'nocheckcertificate': True,
         }
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            if os.path.exists(file_path): os.remove(file_path)
+            if os.path.exists(file_path): 
+                os.remove(file_path)
+            
             info = ydl.extract_info(url, download=True)
-            return file_path, info.get('title', 'Video')
+            
+            if os.path.exists(file_path):
+                return file_path, info.get('title', 'Video')
+            else:
+                return None, "File not found"
+                
     except Exception as e: 
         return None, str(e)
 
+# --- القائمة الرئيسية ---
 def get_main_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -110,7 +124,7 @@ def handle_text(message):
             bot.delete_message(chat_id, status_msg.message_id)
             os.remove(path)
         else:
-            bot.edit_message_text(f"❌ فشل التحميل. يرجى التأكد من رفع ملف cookies.txt", chat_id, status_msg.message_id)
+            bot.edit_message_text(f"❌ فشل التحميل. (تأكد من تحديث ملف cookies.txt)", chat_id, status_msg.message_id)
         user_states[chat_id] = None
 
 if __name__ == '__main__':
