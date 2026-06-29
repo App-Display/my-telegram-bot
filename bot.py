@@ -3,31 +3,35 @@ import telebot
 import yt_dlp
 import threading
 import http.server
+import time
 
-# 1. إعداد التوكن
+# 1. إعداد البوت
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+
 if not BOT_TOKEN:
-    print("❌ خطأ: لم يتم العثور على BOT_TOKEN في إعدادات المتغيرات (Variables) في Railway!")
-    exit()
+    print("❌ خطأ: BOT_TOKEN غير موجود في متغيرات البيئة!")
+    exit(1)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# 2. سيرفر للحفاظ على البوت نشطاً
+# 2. السيرفر الوهمي (ضروري جداً لبقاء البوت نشطاً في Railway)
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
-    httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
-    print(f"🌐 السيرفر يعمل على المنفذ {port}")
-    httpd.serve_forever()
+    server = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
+    print(f"🌐 السيرفر الوهمي يعمل على البورت {port}")
+    server.serve_forever()
 
-# 3. دالة التحميل (بدون كوكيز لضمان العمل)
+# تشغيل السيرفر في الخلفية
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
+# 3. دالة التحميل المحدثة
 def download_video(url, chat_id):
     file_path = f'/tmp/video_{chat_id}.mp4'
-    # خيارات تحميل قوية تحاكي المتصفح دون الحاجة لملفات كوكيز
     ydl_opts = {
         'format': 'best',
         'outtmpl': file_path,
-        'quiet': False,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+        'quiet': False, # غيرنا لـ False لنرى الأخطاء في السجلات
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
     }
     try:
         if os.path.exists(file_path): os.remove(file_path)
@@ -35,35 +39,28 @@ def download_video(url, chat_id):
             info = ydl.extract_info(url, download=True)
             return file_path, info.get('title', 'Video')
     except Exception as e:
-        print(f"❌ خطأ في التحميل: {e}")
         return None, str(e)
 
-# 4. أوامر البوت
+# 4. الأوامر
 @bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.reply_to(message, "🚀 البوت يعمل! أرسل رابط الفيديو للتحميل.")
+def start(message):
+    bot.reply_to(message, "✅ البوت يعمل! أرسل رابط الفيديو للتحميل.")
 
 @bot.message_handler(func=lambda m: True)
-def handle_msg(message):
+def handle_message(message):
     url = message.text.strip()
-    if not url.startswith("http"):
-        bot.reply_to(message, "يرجى إرسال رابط صحيح يبدأ بـ http")
-        return
-
-    status = bot.reply_to(message, "⏳ جاري التحميل، يرجى الانتظار...")
+    status_msg = bot.reply_to(message, "⏳ جاري المعالجة...")
     
-    file_path, title = download_video(url, message.chat.id)
+    path, title = download_video(url, message.chat.id)
     
-    if file_path and os.path.exists(file_path):
-        with open(file_path, 'rb') as v:
+    if path and os.path.exists(path):
+        with open(path, 'rb') as v:
             bot.send_video(message.chat.id, v, caption=title)
-        bot.delete_message(message.chat.id, status.message_id)
-        os.remove(file_path)
+        bot.delete_message(message.chat.id, status_msg.message_id)
+        os.remove(path)
     else:
-        bot.edit_message_text(f"❌ فشل التحميل. الرابط قد لا يكون مدعوماً أو خاصاً.\nالخطأ: {title}", message.chat.id, status.message_id)
+        bot.edit_message_text(f"❌ خطأ في التحميل:\n{title}", message.chat.id, status_msg.message_id)
 
-# 5. تشغيل
-if __name__ == '__main__':
-    print("🤖 جاري بدء البوت...")
-    threading.Thread(target=run_dummy_server, daemon=True).start()
-    bot.infinity_polling()
+# 5. التشغيل الدائم
+print("🤖 البوت يعمل الآن وبانتظار الأوامر...")
+bot.infinity_polling(none_stop=True)
