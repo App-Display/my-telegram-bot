@@ -6,23 +6,21 @@ import http.server
 import time
 
 # --- الإعدادات ---
+# يتم جلب التوكن من Variables في Railway
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
-ADMIN_ID = "ضع_رقم_الآيدي_الخاص_بك_هنا" # <--- ضع رقمك هنا! (يمكنك معرفته من بوت @userinfobot)
+# ضع هنا الآيدي الخاص بك (احصل عليه من بوت @userinfobot)
+ADMIN_ID = "000000000" 
 
-# التحقق من التوكن
 if not BOT_TOKEN:
-    print("❌ خطأ: BOT_TOKEN غير موجود في إعدادات Variables!")
+    print("❌ خطأ: لم يتم العثور على BOT_TOKEN في إعدادات Railway!")
     exit(1)
 
-try:
-    bot = telebot.TeleBot(BOT_TOKEN)
-except Exception as e:
-    print(f"❌ خطأ في الاتصال: {e}")
-    exit(1)
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# --- حفظ المستخدمين ---
+# --- نظام حفظ المستخدمين ---
 def save_user(chat_id):
     try:
+        # حفظ الآيدي في ملف نصي
         with open("users.txt", "a") as f:
             f.write(f"{chat_id}\n")
     except:
@@ -30,11 +28,11 @@ def save_user(chat_id):
 
 def get_users():
     if not os.path.exists("users.txt"): return []
+    # قراءة الملف وحذف التكرار
     with open("users.txt", "r") as f:
-        # قراءة الملف وحذف التكرار
         return list(set(f.read().splitlines()))
 
-# --- سيرفر للبقاء نشطاً ---
+# --- سيرفر للبقاء نشطاً (Health Check) ---
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     server = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
@@ -64,7 +62,7 @@ def download_video(url, chat_id):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     save_user(message.chat.id)
-    bot.reply_to(message, "✅ أهلاً بك! البوت يعمل الآن. أرسل رابط الفيديو للتحميل.")
+    bot.reply_to(message, "✅ أهلاً بك! البوت يعمل الآن وجاهز للتحميل.")
 
 # أمر الإعلان (Broadcast)
 @bot.message_handler(commands=['announce'])
@@ -80,7 +78,7 @@ def announce(message):
     for uid in users:
         try:
             bot.send_message(uid, msg)
-            time.sleep(0.1) # لمنع حظر البوت من تيليجرام
+            time.sleep(0.1) # تأخير بسيط لمنع الحظر
         except:
             continue
     bot.reply_to(message, "✅ تم الإرسال للجميع!")
@@ -99,5 +97,5 @@ def handle_msg(message):
     else:
         bot.edit_message_text(f"❌ خطأ: الرابط غير مدعوم.\n{title}", message.chat.id, status_msg.message_id)
 
-print("🤖 البوت يعمل الآن...")
+print("🤖 البوت جاهز ويعمل الآن...")
 bot.infinity_polling()
