@@ -11,8 +11,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- إعداد التوكن ---
 # تأكد من إضافة BOT_TOKEN في إعدادات البيئة (Environment Variables) في موقع الاستضافة
-BOT_TOKEN = "8128965245:AAHZ0LIhLWdJ5WcE9- joCLJkOrScPmPBCXs"
-os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # الروابط المستقلة
