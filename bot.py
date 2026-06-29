@@ -5,50 +5,46 @@ import threading
 import http.server
 import time
 
-# --- الإعدادات ---
-# يتم جلب التوكن من Variables في Railway
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
-# ضع هنا الآيدي الخاص بك (احصل عليه من بوت @userinfobot)
-ADMIN_ID = "000000000" 
+# 1. إعداد التوكن والآيدي الخاص بك (ADMIN_ID)
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+# استبدل هذا الرقم بالآيدي الخاص بك (يمكنك معرفته من بوت @userinfobot)
+ADMIN_ID = "123456789" 
 
 if not BOT_TOKEN:
-    print("❌ خطأ: لم يتم العثور على BOT_TOKEN في إعدادات Railway!")
-    exit(1)
+    print("❌ خطأ: لم يتم العثور على BOT_TOKEN!")
+    exit()
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# --- نظام حفظ المستخدمين ---
+# --- دالة حفظ المستخدمين ---
 def save_user(chat_id):
     try:
-        # حفظ الآيدي في ملف نصي
         with open("users.txt", "a") as f:
             f.write(f"{chat_id}\n")
     except:
         pass
 
-def get_users():
+def get_unique_users():
     if not os.path.exists("users.txt"): return []
-    # قراءة الملف وحذف التكرار
     with open("users.txt", "r") as f:
+        # قراءة الملف وإزالة التكرارات
         return list(set(f.read().splitlines()))
 
-# --- سيرفر للبقاء نشطاً (Health Check) ---
+# 2. سيرفر للحفاظ على البوت نشطاً
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
-    server = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
+    httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
     print(f"🌐 السيرفر يعمل على المنفذ {port}")
-    server.serve_forever()
+    httpd.serve_forever()
 
-threading.Thread(target=run_dummy_server, daemon=True).start()
-
-# --- دالة التحميل ---
+# 3. دالة التحميل
 def download_video(url, chat_id):
-    file_path = f'/tmp/vid_{chat_id}.mp4'
+    file_path = f'/tmp/video_{chat_id}.mp4'
     ydl_opts = {
         'format': 'best',
         'outtmpl': file_path,
-        'quiet': True,
-        'no_warnings': True,
+        'quiet': False,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
     }
     try:
         if os.path.exists(file_path): os.remove(file_path)
@@ -58,44 +54,52 @@ def download_video(url, chat_id):
     except Exception as e:
         return None, str(e)
 
-# --- الأوامر ---
+# 4. أوامر البوت
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    save_user(message.chat.id)
-    bot.reply_to(message, "✅ أهلاً بك! البوت يعمل الآن وجاهز للتحميل.")
+    save_user(message.chat.id) # حفظ المستخدم عند البدء
+    bot.reply_to(message, "🚀 البوت يعمل! أرسل رابط الفيديو للتحميل.")
 
-# أمر الإعلان (Broadcast)
+# --- أمر الإعلان (Broadcast) ---
 @bot.message_handler(commands=['announce'])
-def announce(message):
+def broadcast(message):
     if str(message.chat.id) != ADMIN_ID:
-        return # يتجاهل أي شخص غيرك
+        return # يتجاهل الأمر إذا لم تكن أنت المرسل
 
-    users = get_users()
-    msg = "✅ تم إصلاح جميع المشاكل في البوت! الآن يعمل بسرعة وكفاءة. جرب التحميل الآن!"
-    
+    users = get_unique_users()
     bot.reply_to(message, f"📢 جاري الإرسال لـ {len(users)} مستخدم...")
     
     for uid in users:
         try:
-            bot.send_message(uid, msg)
-            time.sleep(0.1) # تأخير بسيط لمنع الحظر
+            bot.send_message(uid, "✅ تم إصلاح جميع المشاكل في البوت! الآن يعمل بسرعة وكفاءة. جرب التحميل الآن!")
+            time.sleep(0.1) # تأخير بسيط لمنع حظر البوت من تيليجرام
         except:
-            continue
-    bot.reply_to(message, "✅ تم الإرسال للجميع!")
+            continue # تخطي المستخدمين الذين قاموا بحظر البوت
+    
+    bot.reply_to(message, "✅ تم الإرسال للجميع بنجاح.")
 
 @bot.message_handler(func=lambda m: True)
 def handle_msg(message):
-    save_user(message.chat.id)
-    status_msg = bot.reply_to(message, "⏳ جاري المعالجة...")
-    path, title = download_video(message.text.strip(), message.chat.id)
-    
-    if path and os.path.exists(path):
-        with open(path, 'rb') as v:
-            bot.send_video(message.chat.id, v, caption=title)
-        bot.delete_message(message.chat.id, status_msg.message_id)
-        os.remove(path)
-    else:
-        bot.edit_message_text(f"❌ خطأ: الرابط غير مدعوم.\n{title}", message.chat.id, status_msg.message_id)
+    save_user(message.chat.id) # حفظ المستخدم عند إرسال أي رابط
+    url = message.text.strip()
+    if not url.startswith("http"):
+        bot.reply_to(message, "يرجى إرسال رابط صحيح يبدأ بـ http")
+        return
 
-print("🤖 البوت جاهز ويعمل الآن...")
-bot.infinity_polling()
+    status = bot.reply_to(message, "⏳ جاري التحميل، يرجى الانتظار...")
+    
+    file_path, title = download_video(url, message.chat.id)
+    
+    if file_path and os.path.exists(file_path):
+        with open(file_path, 'rb') as v:
+            bot.send_video(message.chat.id, v, caption=title)
+        bot.delete_message(message.chat.id, status.message_id)
+        os.remove(file_path)
+    else:
+        bot.edit_message_text(f"❌ فشل التحميل. الرابط قد لا يكون مدعوماً.\nالخطأ: {title}", message.chat.id, status.message_id)
+
+# 5. تشغيل
+if __name__ == '__main__':
+    print("🤖 جاري بدء البوت...")
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+    bot.infinity_polling()
