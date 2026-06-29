@@ -5,18 +5,18 @@ import threading
 import http.server
 import time
 
-# 1. إعداد التوكن والآيدي الخاص بك (ADMIN_ID)
+# --- 1. الإعدادات ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-# استبدل هذا الرقم بالآيدي الخاص بك (يمكنك معرفته من بوت @userinfobot)
-ADMIN_ID = "123456789" 
+# ضع هنا الآيدي الخاص بك (احصل عليه من بوت @userinfobot)
+ADMIN_ID = "000000000" 
 
 if not BOT_TOKEN:
-    print("❌ خطأ: لم يتم العثور على BOT_TOKEN!")
-    exit()
+    print("❌ خطأ: BOT_TOKEN غير موجود في متغيرات البيئة!")
+    exit(1)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# --- دالة حفظ المستخدمين ---
+# --- 2. حفظ المستخدمين ---
 def save_user(chat_id):
     try:
         with open("users.txt", "a") as f:
@@ -30,14 +30,16 @@ def get_unique_users():
         # قراءة الملف وإزالة التكرارات
         return list(set(f.read().splitlines()))
 
-# 2. سيرفر للحفاظ على البوت نشطاً
+# --- 3. سيرفر الحفاظ على البوت نشطاً ---
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
     print(f"🌐 السيرفر يعمل على المنفذ {port}")
     httpd.serve_forever()
 
-# 3. دالة التحميل
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
+# --- 4. دالة التحميل القوية ---
 def download_video(url, chat_id):
     file_path = f'/tmp/video_{chat_id}.mp4'
     ydl_opts = {
@@ -54,13 +56,13 @@ def download_video(url, chat_id):
     except Exception as e:
         return None, str(e)
 
-# 4. أوامر البوت
+# --- 5. الأوامر ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    save_user(message.chat.id) # حفظ المستخدم عند البدء
+    save_user(message.chat.id)
     bot.reply_to(message, "🚀 البوت يعمل! أرسل رابط الفيديو للتحميل.")
 
-# --- أمر الإعلان (Broadcast) ---
+# --- ميزة الإعلان (Broadcast) ---
 @bot.message_handler(commands=['announce'])
 def broadcast(message):
     if str(message.chat.id) != ADMIN_ID:
@@ -72,15 +74,15 @@ def broadcast(message):
     for uid in users:
         try:
             bot.send_message(uid, "✅ تم إصلاح جميع المشاكل في البوت! الآن يعمل بسرعة وكفاءة. جرب التحميل الآن!")
-            time.sleep(0.1) # تأخير بسيط لمنع حظر البوت من تيليجرام
+            time.sleep(0.1) # تأخير بسيط
         except:
-            continue # تخطي المستخدمين الذين قاموا بحظر البوت
+            continue
     
     bot.reply_to(message, "✅ تم الإرسال للجميع بنجاح.")
 
 @bot.message_handler(func=lambda m: True)
 def handle_msg(message):
-    save_user(message.chat.id) # حفظ المستخدم عند إرسال أي رابط
+    save_user(message.chat.id)
     url = message.text.strip()
     if not url.startswith("http"):
         bot.reply_to(message, "يرجى إرسال رابط صحيح يبدأ بـ http")
@@ -98,8 +100,7 @@ def handle_msg(message):
     else:
         bot.edit_message_text(f"❌ فشل التحميل. الرابط قد لا يكون مدعوماً.\nالخطأ: {title}", message.chat.id, status.message_id)
 
-# 5. تشغيل
+# --- 6. التشغيل ---
 if __name__ == '__main__':
     print("🤖 جاري بدء البوت...")
-    threading.Thread(target=run_dummy_server, daemon=True).start()
     bot.infinity_polling()
