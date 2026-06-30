@@ -5,17 +5,19 @@ import yt_dlp
 import threading
 import http.server
 
-# 1. إعداد التوكن
+# 1. إعداد التوكن مع فحص أمان
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# إذا لم يجد التوكن، لن ينهار البوت، بل سيعطيك رسالة واضحة في الـ Logs
 if not BOT_TOKEN:
-    print("❌ خطأ: لم يتم العثور على BOT_TOKEN في Railway!")
+    print("❌ خطأ حرج: لم يتم العثور على BOT_TOKEN في إعدادات Variables في Railway!")
     exit()
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# 2. إعداد الأزرار (القائمة)
-def main_menu():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+# 2. إعداد القائمة والأزرار (كما طلبتها)
+def get_main_menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn1 = types.KeyboardButton('رابط فيديو 🎥')
     btn2 = types.KeyboardButton('رابط تعديل ✨')
     btn3 = types.KeyboardButton('تحميل فيديو 📥')
@@ -24,13 +26,11 @@ def main_menu():
     markup.add(btn1, btn2, btn3, btn4, btn5)
     return markup
 
-# 3. سيرفر للحفاظ على البوت نشطاً
+# 3. سيرفر للحفاظ على البوت نشطاً (Railway Keep-Alive)
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
     httpd.serve_forever()
-
-threading.Thread(target=run_dummy_server, daemon=True).start()
 
 # 4. دالة التحميل
 def download_video(url, chat_id):
@@ -52,7 +52,7 @@ def download_video(url, chat_id):
 # 5. الأوامر
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "👋 أهلاً بك، المطور سيف الدين يرحب بك!", reply_markup=main_menu())
+    bot.reply_to(message, "👋 أهلاً بك، المطور سيف الدين يرحب بك!", reply_markup=get_main_menu())
 
 @bot.message_handler(func=lambda message: message.text in ['رابط فيديو 🎥', 'تحميل فيديو 📥'])
 def ask_for_link(message):
@@ -60,7 +60,7 @@ def ask_for_link(message):
 
 @bot.message_handler(func=lambda message: message.text.startswith("http"))
 def handle_msg(message):
-    status = bot.reply_to(message, "⏳ جاري التحميل...")
+    status = bot.reply_to(message, "⏳ جاري التحميل، يرجى الانتظار...")
     file_path, title = download_video(message.text.strip(), message.chat.id)
     
     if file_path and os.path.exists(file_path):
@@ -74,4 +74,5 @@ def handle_msg(message):
 # 6. التشغيل
 if __name__ == '__main__':
     print("🤖 البوت يعمل الآن بكامل ميزاته...")
+    threading.Thread(target=run_dummy_server, daemon=True).start()
     bot.infinity_polling()
