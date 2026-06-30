@@ -5,27 +5,28 @@ import yt_dlp
 import threading
 import http.server
 
-# 1. الإعدادات
+# 1. إعداد التوكن
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = "000000000" # ضع الآيدي الخاص بك هنا
 
 if not BOT_TOKEN:
-    print("❌ خطأ: لم يتم العثور على BOT_TOKEN في إعدادات Railway!")
+    print("❌ خطأ حرج: لم يتم العثور على BOT_TOKEN!")
     exit(1)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# 2. الأزرار المدمجة (Inline Buttons) - تظهر فوق الرسالة
+# 2. إنشاء الأزرار (Inline - المدمجة مع الرسالة)
+# هذه الأزرار ستظهر فوق/تحت الرسالة ولن تأخذ مكان لوحة المفاتيح أبداً
 def get_inline_menu():
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    # إضافة الأزرار كما طلبت
-    btn1 = types.InlineKeyboardButton('رابط فيديو 🎥', callback_data='btn_video')
-    btn2 = types.InlineKeyboardButton('رابط تعديل ✨', callback_data='btn_edit')
-    btn3 = types.InlineKeyboardButton('تحميل فيديو 📥', callback_data='btn_download')
-    btn4 = types.InlineKeyboardButton('أخبار وبث مباشر 🌐', callback_data='btn_news')
-    btn5 = types.InlineKeyboardButton('تلقيم رابط 💣', callback_data='btn_spam')
-    btn6 = types.InlineKeyboardButton('رابط صور 🖼️', callback_data='btn_photo')
-    markup.add(btn1, btn2, btn3, btn4, btn5, btn6)
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton('رابط فيديو 🎥', callback_data='btn_video'),
+        types.InlineKeyboardButton('رابط تعديل ✨', callback_data='btn_edit'),
+        types.InlineKeyboardButton('تحميل فيديو 📥', callback_data='btn_download'),
+        types.InlineKeyboardButton('أخبار وبث مباشر 🌐', callback_data='btn_news'),
+        types.InlineKeyboardButton('تلقيم رابط 💣', callback_data='btn_spam'),
+        types.InlineKeyboardButton('رابط صور 🖼️', callback_data='btn_photo')
+    )
     return markup
 
 # 3. حفظ المستخدمين
@@ -35,12 +36,20 @@ def save_user(chat_id):
             f.write(f"{chat_id}\n")
     except: pass
 
-def get_users():
+def get_unique_users():
     if not os.path.exists("users.txt"): return []
     with open("users.txt", "r") as f:
         return list(set(f.read().splitlines()))
 
-# 4. دالة التحميل
+# 4. سيرفر الحفاظ على البوت نشطاً
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
+    httpd.serve_forever()
+
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
+# 5. دالة التحميل
 def download_video(url, chat_id):
     file_path = f'/tmp/video_{chat_id}.mp4'
     ydl_opts = {'format': 'best', 'outtmpl': file_path, 'quiet': True}
@@ -52,23 +61,19 @@ def download_video(url, chat_id):
     except Exception as e:
         return None, str(e)
 
-# 5. الأوامر
+# 6. الأوامر
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     save_user(message.chat.id)
-    bot.reply_to(message, "👋 أهلاً بك، المطور سيف الدين يرحب بك!", reply_markup=get_inline_menu())
-
-@bot.callback_query_handler(func=lambda call: True)
-def callback_handler(call):
-    bot.answer_callback_query(call.id, "أرسل الرابط الآن")
-    bot.send_message(call.message.chat.id, "يرجى إرسال الرابط للبدء:")
+    # هنا تم استدعاء الأزرار المدمجة (Inline)
+    bot.send_message(message.chat.id, "👋 أهلاً بك، المطور سيف الدين يرحب بك!", reply_markup=get_inline_menu())
 
 @bot.message_handler(commands=['announce'])
 def announce(message):
     if str(message.chat.id) != ADMIN_ID: return
-    users = get_users()
+    users = get_unique_users()
     for uid in users:
-        try: bot.send_message(uid, "📢 تحديث هام: البوت يعمل الآن بجميع الميزات!")
+        try: bot.send_message(uid, "✅ تم تحديث البوت! جربه الآن.")
         except: continue
 
 @bot.message_handler(func=lambda message: message.text.startswith("http"))
@@ -83,7 +88,5 @@ def handle_msg(message):
     else:
         bot.edit_message_text(f"❌ فشل التحميل: {title}", message.chat.id, status.message_id)
 
-# 6. التشغيل
 if __name__ == '__main__':
-    threading.Thread(target=lambda: http.server.HTTPServer(('', 8080), http.server.SimpleHTTPRequestHandler).serve_forever(), daemon=True).start()
     bot.infinity_polling()
