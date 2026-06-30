@@ -7,15 +7,11 @@ import http.server
 
 # 1. الإعدادات
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = "000000000" # ضع الآيدي الخاص بك هنا
-
-if not BOT_TOKEN:
-    print("❌ خطأ: لم يتم العثور على BOT_TOKEN في إعدادات Railway!")
-    exit(1)
+ADMIN_ID = "8169635171" # تم تحديث الآيدي الخاص بك هنا
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# 2. الأزرار المدمجة فقط (Inline Buttons) - تظهر فوق الرسالة
+# 2. الأزرار المدمجة (Inline Buttons) فقط
 def get_inline_menu():
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -28,38 +24,32 @@ def get_inline_menu():
     )
     return markup
 
-# 3. حفظ المستخدمين
-def save_user(chat_id):
-    try:
-        with open("users.txt", "a") as f:
-            f.write(f"{chat_id}\n")
-    except: pass
-
-# 4. الأوامر
+# 3. الأوامر
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    save_user(message.chat.id)
-    # إخفاء أي لوحة مفاتيح قديمة (Reply Keyboard)
-    remove_keyboard = types.ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, "👋 أهلاً بك، المطور سيف الدين يرحب بك!", reply_markup=remove_keyboard)
-    # إرسال الأزرار المدمجة فقط
+    # إزالة أي لوحة مفاتيح سابقة نهائياً
+    remove_kb = types.ReplyKeyboardRemove()
+    bot.send_message(message.chat.id, "👋 أهلاً بك، تم تحديث البوت.", reply_markup=remove_kb)
+    # إرسال الأزرار المدمجة
     bot.send_message(message.chat.id, "اختر من القائمة:", reply_markup=get_inline_menu())
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
     bot.answer_callback_query(call.id, "أرسل الرابط للتحميل")
-    bot.send_message(call.message.chat.id, "يرجى إرسال رابط الفيديو للبدء:")
+    bot.send_message(call.message.chat.id, "أرسل رابط الفيديو الآن:")
 
-@bot.message_handler(func=lambda message: message.text.startswith("http"))
+@bot.message_handler(func=lambda message: True)
 def handle_msg(message):
-    save_user(message.chat.id)
-    status = bot.reply_to(message, "⏳ جاري التحميل...")
-    # (هنا يتم تنفيذ التحميل)
-    # ملاحظة: تم حذف أي كود ReplyKeyboardMarkup هنا
-    bot.edit_message_text("تم استلام الرابط، جاري المعالجة...", message.chat.id, status.message_id)
+    # إذا كان رابطاً
+    if message.text.startswith("http"):
+        bot.reply_to(message, "⏳ جاري المعالجة...")
+    # إذا كان أمراً إدارياً (الإعلان)
+    elif message.text == "/announce" and str(message.chat.id) == ADMIN_ID:
+        bot.reply_to(message, "📢 تم تفعيل ميزة الإعلان.")
+    else:
+        bot.reply_to(message, "الرجاء إرسال رابط فيديو صحيح.")
 
-# تشغيل السيرفر للبقاء نشطاً
-threading.Thread(target=lambda: http.server.HTTPServer(('', 8080), http.server.SimpleHTTPRequestHandler).serve_forever(), daemon=True).start()
-
+# تشغيل السيرفر
 if __name__ == '__main__':
+    threading.Thread(target=lambda: http.server.HTTPServer(('', 8080), http.server.SimpleHTTPRequestHandler).serve_forever(), daemon=True).start()
     bot.infinity_polling()
