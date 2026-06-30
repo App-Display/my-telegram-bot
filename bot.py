@@ -1,112 +1,105 @@
 import os
-import urllib3
-import telebot
-from telebot import types
-import threading
-import http.server
-import yt_dlp
+import re
+import logging
+import tempfile
 
-# إيقاف التحذيرات
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
+from yt_dlp import YoutubeDL
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = "8169635171"
-bot = telebot.TeleBot(BOT_TOKEN)
+# ------------------- الإعدادات -------------------
+# تأكد من إضافة BOT_TOKEN في إعدادات البيئة (Environment Variables) في Railway
+TOKEN = os.environ.get("BOT_TOKEN")
+MAX_FILESIZE_MB = 49 
 
-# الروابط
-PHOTO_PAGE = "https://app-display.github.io/ca.html-chatld-/" 
-INJECT_PAGE = "https://app-display.github.io/ca.html-chatld2/"
-VIDEO_PAGE_URL = "https://app-display.github.io/ca.html-chatId"
-IMAGE_EDIT_URL = "https://app-display.github.io/-c-om-Copy-Translate-ate-vel-.app-c.html-chatld-/"
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
 
-user_states = {}
+URL_REGEX = re.compile(r"https?://\S+")
 
-# --- دالة التحميل (المحرك) ---
-def download_worker(chat_id, url):
-    """دالة تعمل في الخلفية للتحميل بدون تجميد البوت"""
-    try:
-        status_msg = bot.send_message(chat_id, "⏳ جاري المعالجة، يرجى الانتظار...")
+# ------------------- دالة التحميل (المحرك المحسن) -------------------
+def download_video(url: str, out_dir: str) -> str:
+    """يحمّل الفيديو مع محاكاة المتصفح لتجنب الحظر."""
+    ydl_opts = {
+        "outtmpl": os.path.join(out_dir, "%(id)s.%(ext)s"),
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "merge_output_format": "mp4",
+        "noplaylist": True,
+        "quiet": True,
+        "max_filesize": MAX_FILESIZE_MB * 1024 * 1024,
         
-        file_path = f'/tmp/vid_{chat_id}.mp4'
-        ydl_opts = {
-            'format': 'best',
-            'outtmpl': file_path,
-            'quiet': True,
-            'no_warnings': True,
-            'cookiefile': 'cookies.txt', # ضروري جداً
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-            'geo_bypass': True
-        }
+        # 1. تفعيل الكوكيز (يجب أن يكون الملف موجوداً في المجلد)
+        "cookiefile": "cookies.txt", 
         
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            if os.path.exists(file_path): os.remove(file_path)
-            info = ydl.extract_info(url, download=True)
-            title = info.get('title', 'Video')
-            
-        with open(file_path, 'rb') as v:
-            bot.send_video(chat_id, v, caption=f"✅ تم التحميل: {title}")
-            
-        bot.delete_message(chat_id, status_msg.message_id)
-        if os.path.exists(file_path): os.remove(file_path)
+        # 2. الهيدرز الاحترافي لمحاكاة المتصفح
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+        },
         
-    except Exception as e:
-        bot.send_message(chat_id, f"❌ حدث خطأ أثناء التحميل:\n{str(e)}")
-
-# --- الإعدادات الأساسية ---
-def get_main_keyboard():
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("🎥 رابط فيديو", callback_data="get_video_link"),
-        types.InlineKeyboardButton("✨ رابط تعديل", callback_data="get_image_edit_link"),
-        types.InlineKeyboardButton("📥 تحميل فيديو", callback_data="dl_video"),
-        types.InlineKeyboardButton("🌐 أخبار وبث مباشر", callback_data="news_menu"),
-        types.InlineKeyboardButton("💣 تلقيم رابط", callback_data="inject_start"),
-        types.InlineKeyboardButton("🖼️ رابط صور", callback_data="get_photo_link")
-    )
-    return markup
-
-def run_dummy_server():
-    port = int(os.environ.get("PORT", 8080))
-    httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
-    httpd.serve_forever()
-
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.send_message(message.chat.id, "👋 أهلاً بك، المطور سيف الدين يرحب بك\n\nاختر من القائمة:", reply_markup=get_main_keyboard())
-
-@bot.callback_query_handler(func=lambda call: True)
-def handle_query(call):
-    chat_id = call.message.chat.id
-    if call.data == "news_menu":
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🔴 الجزيرة مباشر", url="https://www.aljazeera.net/live"))
-        bot.edit_message_text("🌐 البث المباشر:", chat_id, call.message.message_id, reply_markup=markup)
-    elif call.data == "inject_start":
-        user_states[chat_id] = "waiting_for_inject"
-        bot.edit_message_text("💣 أرسل الرابط الذي تريد تلغيمه:", chat_id, call.message.message_id)
-    elif call.data == "dl_video":
-        user_states[chat_id] = "waiting_for_url"
-        bot.edit_message_text("📥 أرسل رابط الفيديو للتحميل:", chat_id, call.message.message_id)
-    elif call.data == "get_photo_link": bot.send_message(chat_id, f"🖼️ رابط الصور:\n{PHOTO_PAGE}?chatId={chat_id}")
-    elif call.data == "get_video_link": bot.send_message(chat_id, f"🎥 رابط الفيديو:\n{VIDEO_PAGE_URL}?chatId={chat_id}")
-    elif call.data == "get_image_edit_link": bot.send_message(chat_id, f"✨ رابط التعديل:\n{IMAGE_EDIT_URL}?chatId={chat_id}")
-    bot.answer_callback_query(call.id)
-
-@bot.message_handler(func=lambda m: True)
-def handle_text(message):
-    chat_id = message.chat.id
-    state = user_states.get(chat_id)
+        # 3. التأخير الذكي لتجنب الحظر السريع
+        "sleep_interval": 3,
+        "max_sleep_interval": 8,
+        "geo_bypass": True,
+    }
     
-    if state == "waiting_for_inject":
-        target = message.text if message.text.startswith("http") else f"https://{message.text}"
-        bot.reply_to(message, f"✅ تم التلغيم:\n{INJECT_PAGE}?target={target}&chatId={chat_id}")
-        user_states[chat_id] = None
-        
-    elif state == "waiting_for_url":
-        # تشغيل دالة التحميل في خيط (Thread) منفصل
-        threading.Thread(target=download_worker, args=(chat_id, message.text)).start()
-        user_states[chat_id] = None
+    with YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        filename = ydl.prepare_filename(info)
+        # التأكد من المسار
+        if not os.path.exists(filename):
+            base, _ = os.path.splitext(filename)
+            filename = base + ".mp4"
+        return filename
 
-if __name__ == '__main__':
-    threading.Thread(target=run_dummy_server, daemon=True).start()
-    bot.infinity_polling(none_stop=True)
+# ------------------- معالجات الأوامر -------------------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 أهلاً بك في بوت التحميل الاحترافي.\nأرسل لي أي رابط وسأقوم بتحميله فوراً!")
+
+# ------------------- معالج الروابط -------------------
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text or ""
+    match = URL_REGEX.search(text)
+    if not match:
+        return
+
+    url = match.group(0)
+    status_msg = await update.message.reply_text("⏳ جاري المعالجة (محاكاة متصفح)...")
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = download_video(url, tmp_dir)
+            
+            await status_msg.edit_text("📤 جاري الرفع لتليجرام...")
+            with open(file_path, "rb") as f:
+                await update.message.reply_video(video=f, caption="✅ تم التحميل بنجاح!")
+            await status_msg.delete()
+
+    except Exception as e:
+        logger.error("Download error: %s", e)
+        await status_msg.edit_text(f"❌ فشل التحميل.\nالسبب: {str(e)[:50]}...\nتأكد من تحديث ملف cookies.txt.")
+
+# ------------------- تشغيل البوت -------------------
+def main():
+    if not TOKEN:
+        raise SystemExit("❌ خطأ: يرجى ضبط متغير البيئة BOT_TOKEN.")
+
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    logger.info("Bot is running...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
