@@ -1,45 +1,38 @@
 import os
 import telebot
+from telebot import types
 import yt_dlp
 import threading
 import http.server
-import time
 
-# --- 1. الإعدادات ---
+# 1. إعداد التوكن
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-# ضع هنا الآيدي الخاص بك (احصل عليه من بوت @userinfobot)
-ADMIN_ID = "000000000" 
-
 if not BOT_TOKEN:
-    print("❌ خطأ: BOT_TOKEN غير موجود في متغيرات البيئة!")
-    exit(1)
+    print("❌ خطأ: لم يتم العثور على BOT_TOKEN في Railway!")
+    exit()
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# --- 2. حفظ المستخدمين ---
-def save_user(chat_id):
-    try:
-        with open("users.txt", "a") as f:
-            f.write(f"{chat_id}\n")
-    except:
-        pass
+# 2. إعداد الأزرار (القائمة)
+def main_menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn1 = types.KeyboardButton('رابط فيديو 🎥')
+    btn2 = types.KeyboardButton('رابط تعديل ✨')
+    btn3 = types.KeyboardButton('تحميل فيديو 📥')
+    btn4 = types.KeyboardButton('أخبار وبث مباشر 🌐')
+    btn5 = types.KeyboardButton('تلقيم رابط 💣')
+    markup.add(btn1, btn2, btn3, btn4, btn5)
+    return markup
 
-def get_unique_users():
-    if not os.path.exists("users.txt"): return []
-    with open("users.txt", "r") as f:
-        # قراءة الملف وإزالة التكرارات
-        return list(set(f.read().splitlines()))
-
-# --- 3. سيرفر الحفاظ على البوت نشطاً ---
+# 3. سيرفر للحفاظ على البوت نشطاً
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
-    print(f"🌐 السيرفر يعمل على المنفذ {port}")
     httpd.serve_forever()
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# --- 4. دالة التحميل القوية ---
+# 4. دالة التحميل
 def download_video(url, chat_id):
     file_path = f'/tmp/video_{chat_id}.mp4'
     ydl_opts = {
@@ -56,41 +49,19 @@ def download_video(url, chat_id):
     except Exception as e:
         return None, str(e)
 
-# --- 5. الأوامر ---
+# 5. الأوامر
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    save_user(message.chat.id)
-    bot.reply_to(message, "🚀 البوت يعمل! أرسل رابط الفيديو للتحميل.")
+    bot.reply_to(message, "👋 أهلاً بك، المطور سيف الدين يرحب بك!", reply_markup=main_menu())
 
-# --- ميزة الإعلان (Broadcast) ---
-@bot.message_handler(commands=['announce'])
-def broadcast(message):
-    if str(message.chat.id) != ADMIN_ID:
-        return # يتجاهل الأمر إذا لم تكن أنت المرسل
+@bot.message_handler(func=lambda message: message.text in ['رابط فيديو 🎥', 'تحميل فيديو 📥'])
+def ask_for_link(message):
+    bot.reply_to(message, "أرسل الرابط الآن للتحميل:")
 
-    users = get_unique_users()
-    bot.reply_to(message, f"📢 جاري الإرسال لـ {len(users)} مستخدم...")
-    
-    for uid in users:
-        try:
-            bot.send_message(uid, "✅ تم إصلاح جميع المشاكل في البوت! الآن يعمل بسرعة وكفاءة. جرب التحميل الآن!")
-            time.sleep(0.1) # تأخير بسيط
-        except:
-            continue
-    
-    bot.reply_to(message, "✅ تم الإرسال للجميع بنجاح.")
-
-@bot.message_handler(func=lambda m: True)
+@bot.message_handler(func=lambda message: message.text.startswith("http"))
 def handle_msg(message):
-    save_user(message.chat.id)
-    url = message.text.strip()
-    if not url.startswith("http"):
-        bot.reply_to(message, "يرجى إرسال رابط صحيح يبدأ بـ http")
-        return
-
-    status = bot.reply_to(message, "⏳ جاري التحميل، يرجى الانتظار...")
-    
-    file_path, title = download_video(url, message.chat.id)
+    status = bot.reply_to(message, "⏳ جاري التحميل...")
+    file_path, title = download_video(message.text.strip(), message.chat.id)
     
     if file_path and os.path.exists(file_path):
         with open(file_path, 'rb') as v:
@@ -98,9 +69,9 @@ def handle_msg(message):
         bot.delete_message(message.chat.id, status.message_id)
         os.remove(file_path)
     else:
-        bot.edit_message_text(f"❌ فشل التحميل. الرابط قد لا يكون مدعوماً.\nالخطأ: {title}", message.chat.id, status.message_id)
+        bot.edit_message_text(f"❌ فشل التحميل:\n{title}", message.chat.id, status.message_id)
 
-# --- 6. التشغيل ---
+# 6. التشغيل
 if __name__ == '__main__':
-    print("🤖 جاري بدء البوت...")
+    print("🤖 البوت يعمل الآن بكامل ميزاته...")
     bot.infinity_polling()
