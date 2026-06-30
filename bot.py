@@ -55,7 +55,7 @@ def download_video_sync(url, chat_id):
             return file_path, info.get('title', 'Video')
     except Exception as e: return None, str(e)
 
-# --- القائمة (معدلة لتطابق الصورة 118414.jpg) ---
+# --- القائمة ---
 def get_main_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -71,7 +71,8 @@ def get_main_keyboard():
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     save_user(message.chat.id)
-    bot.send_message(message.chat.id, "👋 أهلاً بك، تم تحديث البوت.\n\nاختر من القائمة:", reply_markup=get_main_keyboard())
+    # الرسالة الجديدة المطلوبة
+    bot.send_message(message.chat.id, "👋 أهلاً بك، المطور سيف الدين يرحب بك", reply_markup=get_main_keyboard())
 
 # --- ميزة الإعلان ---
 @bot.message_handler(commands=['announce'])
