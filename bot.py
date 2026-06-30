@@ -71,8 +71,8 @@ def get_main_keyboard():
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     save_user(message.chat.id)
-    # الرسالة الجديدة المطلوبة
-    bot.send_message(message.chat.id, "👋 أهلاً بك، المطور سيف الدين يرحب بك", reply_markup=get_main_keyboard())
+    # الرسالة الترحيبية المحدثة
+    bot.send_message(message.chat.id, "👋 أهلاً بك، المطور سيف الدين يرحب بك\n\nاختر من القائمة:", reply_markup=get_main_keyboard())
 
 # --- ميزة الإعلان ---
 @bot.message_handler(commands=['announce'])
