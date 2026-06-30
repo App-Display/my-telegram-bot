@@ -4,43 +4,54 @@ from telebot import types
 import yt_dlp
 import threading
 import http.server
+import time
 
-# 1. إعداد التوكن مع فحص أمان
+# --- الإعدادات ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = "000000000"  # ضع هنا الآيدي الخاص بك
 
-# إذا لم يجد التوكن، لن ينهار البوت، بل سيعطيك رسالة واضحة في الـ Logs
 if not BOT_TOKEN:
-    print("❌ خطأ حرج: لم يتم العثور على BOT_TOKEN في إعدادات Variables في Railway!")
-    exit()
+    print("❌ خطأ: لم يتم العثور على BOT_TOKEN في إعدادات Railway!")
+    exit(1)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# 2. إعداد القائمة والأزرار (كما طلبتها)
+# --- قائمة الأزرار (كما طلبتها تماماً) ---
 def get_main_menu():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn1 = types.KeyboardButton('رابط فيديو 🎥')
-    btn2 = types.KeyboardButton('رابط تعديل ✨')
-    btn3 = types.KeyboardButton('تحميل فيديو 📥')
-    btn4 = types.KeyboardButton('أخبار وبث مباشر 🌐')
-    btn5 = types.KeyboardButton('تلقيم رابط 💣')
-    markup.add(btn1, btn2, btn3, btn4, btn5)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+    btn_video = types.KeyboardButton('رابط فيديو 🎥')
+    btn_edit = types.KeyboardButton('رابط تعديل ✨')
+    btn_download = types.KeyboardButton('تحميل فيديو 📥')
+    btn_news = types.KeyboardButton('أخبار وبث مباشر 🌐')
+    btn_link = types.KeyboardButton('تلقيم رابط 💣')
+    btn_photo = types.KeyboardButton('رابط صور 🖼️')
+    markup.add(btn_video, btn_edit, btn_download, btn_news, btn_link, btn_photo)
     return markup
 
-# 3. سيرفر للحفاظ على البوت نشطاً (Railway Keep-Alive)
+# --- حفظ المستخدمين ---
+def save_user(chat_id):
+    try:
+        with open("users.txt", "a") as f:
+            f.write(f"{chat_id}\n")
+    except: pass
+
+def get_users():
+    if not os.path.exists("users.txt"): return []
+    with open("users.txt", "r") as f:
+        return list(set(f.read().splitlines()))
+
+# --- سيرفر للبقاء نشطاً ---
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     httpd = http.server.HTTPServer(('', port), http.server.SimpleHTTPRequestHandler)
     httpd.serve_forever()
 
-# 4. دالة التحميل
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
+# --- دالة التحميل ---
 def download_video(url, chat_id):
     file_path = f'/tmp/video_{chat_id}.mp4'
-    ydl_opts = {
-        'format': 'best',
-        'outtmpl': file_path,
-        'quiet': False,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
-    }
+    ydl_opts = {'format': 'best', 'outtmpl': file_path, 'quiet': True}
     try:
         if os.path.exists(file_path): os.remove(file_path)
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -49,30 +60,37 @@ def download_video(url, chat_id):
     except Exception as e:
         return None, str(e)
 
-# 5. الأوامر
+# --- الأوامر ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
+    save_user(message.chat.id)
     bot.reply_to(message, "👋 أهلاً بك، المطور سيف الدين يرحب بك!", reply_markup=get_main_menu())
 
-@bot.message_handler(func=lambda message: message.text in ['رابط فيديو 🎥', 'تحميل فيديو 📥'])
-def ask_for_link(message):
-    bot.reply_to(message, "أرسل الرابط الآن للتحميل:")
+@bot.message_handler(commands=['announce'])
+def announce(message):
+    if str(message.chat.id) != ADMIN_ID: return
+    users = get_users()
+    bot.reply_to(message, "📢 جاري الإرسال...")
+    for uid in users:
+        try: bot.send_message(uid, "✅ تم إصلاح البوت بنجاح!")
+        except: continue
+    bot.reply_to(message, "✅ تم الإرسال.")
 
-@bot.message_handler(func=lambda message: message.text.startswith("http"))
-def handle_msg(message):
-    status = bot.reply_to(message, "⏳ جاري التحميل، يرجى الانتظار...")
-    file_path, title = download_video(message.text.strip(), message.chat.id)
-    
-    if file_path and os.path.exists(file_path):
-        with open(file_path, 'rb') as v:
-            bot.send_video(message.chat.id, v, caption=title)
-        bot.delete_message(message.chat.id, status.message_id)
-        os.remove(file_path)
+@bot.message_handler(func=lambda m: True)
+def handle_all(message):
+    save_user(message.chat.id)
+    text = message.text
+    if text.startswith("http"):
+        status = bot.reply_to(message, "⏳ جاري التحميل...")
+        path, title = download_video(text, message.chat.id)
+        if path and os.path.exists(path):
+            with open(path, 'rb') as v: bot.send_video(message.chat.id, v, caption=title)
+            bot.delete_message(message.chat.id, status.message_id)
+            os.remove(path)
+        else:
+            bot.edit_message_text(f"❌ خطأ: {title}", message.chat.id, status.message_id)
     else:
-        bot.edit_message_text(f"❌ فشل التحميل:\n{title}", message.chat.id, status.message_id)
+        bot.reply_to(message, "الرجاء إرسال رابط فيديو.", reply_markup=get_main_menu())
 
-# 6. التشغيل
-if __name__ == '__main__':
-    print("🤖 البوت يعمل الآن بكامل ميزاته...")
-    threading.Thread(target=run_dummy_server, daemon=True).start()
-    bot.infinity_polling()
+print("🤖 البوت يعمل بكامل ميزاته...")
+bot.infinity_polling()
